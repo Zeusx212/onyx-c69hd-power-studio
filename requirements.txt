@@ -1,4 +1,5 @@
 # Onyx Boox C69HD Customizer Dependencies
+customtkinter>=6.0.0
 Pillow>=10.0.0
 
 # Optional: To package the application into a standalone Windows .exe
