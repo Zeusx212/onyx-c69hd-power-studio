@@ -1001,6 +1001,7 @@ class MainWindow(ctk.CTk):
         b_picker_row.pack(anchor="w", padx=18, pady=4)
 
         ctk.CTkButton(b_picker_row, text="📁 Select bootanimation.zip...", height=34, corner_radius=8, fg_color="#283042", command=self._action_choose_bootanim_zip).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(b_picker_row, text="✨ Generate E-Ink Animation...", height=34, corner_radius=8, fg_color=self.COLOR_GREEN, hover_color="#059669", font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"), command=self._action_generate_eink_bootanim).pack(side="left", padx=(0, 8))
         ctk.CTkButton(b_picker_row, text="🖼️ Create from Folder of Frames...", height=34, corner_radius=8, fg_color="#283042", command=self._action_create_bootanim_from_folder).pack(side="left", padx=(0, 10))
         self.lbl_chosen_bootanim = ctk.CTkLabel(b_picker_row, text="No animation selected", text_color=self.COLOR_TEXT_MUTED)
         self.lbl_chosen_bootanim.pack(side="left")
@@ -1573,6 +1574,21 @@ class MainWindow(ctk.CTk):
         if f:
             self._selected_bootanim_path = f
             self.lbl_chosen_bootanim.configure(text=os.path.basename(f))
+
+    def _action_generate_eink_bootanim(self):
+        try:
+            from scripts.generate_bootanimation import generate_bootanimation_package
+            out_zip = os.path.join(os.getcwd(), "backups", "custom_bootanimation.zip")
+            os.makedirs(os.path.dirname(out_zip), exist_ok=True)
+            ok = generate_bootanimation_package(out_zip, theme="dark", fps=4)
+            if ok:
+                self._selected_bootanim_path = out_zip
+                self.lbl_chosen_bootanim.configure(text=f"Built: {os.path.basename(out_zip)} (E-Ink Dark Edition)")
+                self.append_log(f"Generated custom E-Ink boot animation: {out_zip}")
+                if messagebox.askyesno("Boot Animation Built", f"Successfully generated custom E-Ink boot animation (758x1024 @ 4 FPS, uncompressed)!\nPath: {out_zip}\n\nWould you like to preview it live on the physical device screen now?"):
+                    threading.Thread(target=self.ops.preview_bootanimation_on_device, daemon=True).start()
+        except Exception as e:
+            messagebox.showerror("Generation Error", f"Failed to generate boot animation: {e}")
 
     def _action_create_bootanim_from_folder(self):
         d = filedialog.askdirectory(title="Select Folder Containing PNG Frames")
