@@ -76,9 +76,11 @@ The **C69HD** (`C69_M_STAR`) has unique hardware characteristics:
   - Target choices: User Gallery (`/sdcard/Pictures/Screensaver/`), System Standby (`standby-1.png`), or Shutdown Screen (`shutdown-default.png`).
   - Action buttons: "Open Wallpaper Settings on Device" and "Test Sleep Screen".
 - **Boot Animation Studio**: Install custom `bootanimation.zip` into the Magisk media overlay (`c69hd-custom-media`).
-  - Create from folder of PNG frames.
-  - **Live Preview on Device**: Plays the boot animation live on the physical e-reader screen without needing a reboot!
+  - **1-Click E-Ink Animation Generator**: Instantly builds a compliant, uncompressed (ZIP_STORED) 758 × 1024 animation at 4 FPS featuring vector book unfolding, clean typography, and ghosting-free pulsing progress dots.
+  - **Custom Frame Packaging**: Pack any sequence of images into a compliant boot animation.
+  - **Live Preview on Device**: Plays the boot animation live on the physical e-reader screen without needing a reboot (`setprop ctl.start bootanim`)!
   - 1-Click Restore stock Onyx animation.
+  - Includes standalone CLI: `python scripts/generate_bootanimation.py --theme dark --fps 4 --preview --install`.
 
 ### 9. 🛡️ Root & Partitions
 - **Stock Partition Backup**: Single or full dump of `boot`, `dtbo`, `recovery`, `vbmeta`, `vbmeta_system`, and `persist`.
