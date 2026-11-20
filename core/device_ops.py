@@ -1,11 +1,21 @@
 """
 Device operations controller for Onyx Boox C69HD.
-Implements partition backup, Magisk rooting, hardware button remapping, debloating, and system tweaks.
+Implements partition backup, Magisk rooting, hardware button remapping,
+debloating, personalization (screensavers, boot animations), and system tweaks.
 """
 
 import os
 import json
 import time
+import zipfile
+import shutil
+
+# Try importing Pillow for image processing and thumbnail generation
+try:
+    from PIL import Image, ImageOps
+    HAS_PILLOW = True
+except ImportError:
+    HAS_PILLOW = False
 
 # Available button mapping actions identified from Onyx ROM analysis
 BUTTON_ACTIONS = {
@@ -42,7 +52,7 @@ DEBLOAT_CATALOG = [
             ("com.google.android.gms", "Google Play Services (High RAM, ~200MB+)"),
             ("com.google.android.gsf", "Google Services Framework (~40MB)"),
         ],
-        "safe_preset": False  # User must opt in if they use microG/GmsCore or don't need Google Play
+        "safe_preset": False
     },
     {
         "category": "Stock OEM & Unused Applications",
@@ -56,6 +66,9 @@ DEBLOAT_CATALOG = [
         "safe_preset": False
     }
 ]
+
+SCREEN_WIDTH = 758
+SCREEN_HEIGHT = 1024
 
 class DeviceOps:
     def __init__(self, adb_manager):
@@ -75,19 +88,16 @@ class DeviceOps:
 
         self.adb.log(f"Starting stock partition dump for slot {slot}...")
         
-        # Check su availability on device
         ok, su_check, _ = self.adb.run_shell("su -c 'id'")
         if not ok or "uid=0" not in su_check:
-            return False, "Root (su) is required on device to dump active partitions directly. If unrooted, use fastboot/EDL."
+            return False, "Root (su) is required on device to dump active partitions directly."
 
-        # Dump boot
         self.adb.run_shell(f"su -c 'dd if=/dev/block/bootdevice/by-name/boot{slot} of=/sdcard/stock_boot.img'")
         ok, _, err = self.adb.run_adb("pull", "/sdcard/stock_boot.img", boot_local)
         self.adb.run_shell("rm -f /sdcard/stock_boot.img")
         if not ok or not os.path.exists(boot_local):
             return False, f"Failed to pull boot partition: {err}"
 
-        # Dump vbmeta
         self.adb.run_shell(f"su -c 'dd if=/dev/block/bootdevice/by-name/vbmeta{slot} of=/sdcard/stock_vbmeta.img'")
         self.adb.run_adb("pull", "/sdcard/stock_vbmeta.img", vbmeta_local)
         self.adb.run_shell("rm -f /sdcard/stock_vbmeta.img")
@@ -97,7 +107,6 @@ class DeviceOps:
         return True, f"Partitions backed up to:\n{boot_local}\n{vbmeta_local}"
 
     def install_magisk_apk(self, apk_path):
-        """Installs Magisk APK to device via ADB."""
         if not os.path.exists(apk_path):
             return False, f"APK file not found: {apk_path}"
         self.adb.log(f"Installing Magisk APK: {apk_path}")
@@ -107,14 +116,12 @@ class DeviceOps:
         return False, f"Failed to install APK: {err or out}"
 
     def flash_boot_image_fastboot(self, image_path, slot="_a"):
-        """Flashes a Magisk patched or stock boot image to boot slot via Fastboot."""
         if not os.path.exists(image_path):
             return False, f"Image file not found: {image_path}"
         
         self.adb.log(f"Flashing {image_path} to boot{slot}...")
         ok, out, err = self.adb.run_fastboot("flash", f"boot{slot}", image_path)
         if not ok:
-            # Fallback without slot suffix
             ok, out, err = self.adb.run_fastboot("flash", "boot", image_path)
         
         if ok:
@@ -124,7 +131,6 @@ class DeviceOps:
         return False, f"Fastboot flash failed: {err or out}"
 
     def install_magisk_wake_module(self, zip_path):
-        """Pushes and installs the c69hd-wake Magisk module (Button Wake)."""
         if not os.path.exists(zip_path):
             return False, f"Module zip not found: {zip_path}"
         
@@ -144,7 +150,6 @@ class DeviceOps:
     # BUTTON REMAPPING
     # ==========================================
     def get_current_button_mapping(self):
-        """Reads currently active button mapping from device Settings.Global."""
         ok, out, _ = self.adb.run_shell("settings get global KEYCODE_BACK")
         short_action = ""
         long_action = "toggleFrontLight"
@@ -167,10 +172,6 @@ class DeviceOps:
         }
 
     def apply_button_mapping(self, long_action, short_action=""):
-        """
-        Applies custom long-press and short-press actions to Onyx front button (KEYCODE_BACK)
-        and sends refresh broadcast to Onyx WindowManager/Input framework.
-        """
         payload = {
             "keySet": ["KEYCODE_BACK"],
             "shortPressAction": short_action,
@@ -187,20 +188,200 @@ class DeviceOps:
         else:
             self.adb.run_shell("settings put global key_custom_side_key_short_press_enable 0")
 
-        # Broadcast refresh to Onyx framework
         self.adb.run_shell("am broadcast -a onyx.action.refresh_keymapping")
         self.adb.log("Sent onyx.action.refresh_keymapping broadcast.")
         return True, "Button mapping successfully applied and broadcasted!"
 
     def reset_button_mapping(self):
-        """Restores Onyx factory default button configuration."""
         return self.apply_button_mapping(long_action="toggleFrontLight", short_action="")
+
+    # ==========================================
+    # PERSONALIZATION: SCREENSAVER & BOOT ANIMATION
+    # ==========================================
+    def process_image_for_c69hd(self, src_path, dest_path, convert_grayscale=True):
+        """Resizes/crops image to 758x1024 native C69HD e-ink resolution."""
+        if not HAS_PILLOW:
+            shutil.copyfile(src_path, dest_path)
+            return True
+
+        try:
+            with Image.open(src_path) as img:
+                # Convert to RGB if needed
+                if img.mode not in ("RGB", "L"):
+                    img = img.convert("RGB")
+                
+                # Fit image into 758x1024 with aspect ratio preservation
+                fitted = ImageOps.fit(img, (SCREEN_WIDTH, SCREEN_HEIGHT), Image.Resampling.LANCZOS)
+                
+                if convert_grayscale:
+                    # Convert to high contrast 8-bit grayscale for E-Ink
+                    fitted = fitted.convert("L")
+                
+                fitted.save(dest_path, "PNG")
+                return True
+        except Exception as e:
+            self.adb.log(f"Image processing error: {e}")
+            return False
+
+    def push_screensaver_image(self, local_image_path, target="user", custom_name="c69hd_custom_ss"):
+        """
+        Pushes a screensaver image to the device.
+        target: 'user' (stores in /sdcard/Pictures/Screensaver/),
+                'standby' (replaces /system/media/standby-1.png via Magisk),
+                'shutdown' (replaces /system/media/shutdown-default.png via Magisk)
+        """
+        if not os.path.exists(local_image_path):
+            return False, f"File not found: {local_image_path}"
+
+        temp_processed = os.path.join(os.path.dirname(local_image_path), f"_processed_{os.path.basename(local_image_path)}.png")
+        self.process_image_for_c69hd(local_image_path, temp_processed)
+
+        if target == "user":
+            remote_dir = "/sdcard/Pictures/Screensaver"
+            remote_file = f"{remote_dir}/{custom_name}.png"
+            self.adb.run_shell(f"mkdir -p {remote_dir}")
+            ok, _, err = self.adb.run_adb("push", temp_processed, remote_file)
+            # Notify media scanner
+            self.adb.run_shell(f"am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file://{remote_file}")
+            if os.path.exists(temp_processed):
+                os.remove(temp_processed)
+            if ok:
+                return True, f"Screensaver pushed to {remote_file} and registered in Gallery/Screensaver selector!"
+            return False, f"Failed to push screensaver: {err}"
+
+        elif target in ["standby", "shutdown"]:
+            target_filename = "standby-1.png" if target == "standby" else "shutdown-default.png"
+            module_dir = "/data/adb/modules/c69hd-custom-media"
+            module_media = f"{module_dir}/system/media"
+            
+            # Setup Magisk module structure
+            setup_cmds = f"""
+mkdir -p {module_media}
+cat << 'EOF' > {module_dir}/module.prop
+id=c69hd-custom-media
+name=C69HD Custom Media Overlay
+version=1.0
+versionCode=1
+author=Zeusx212
+description=Systemless custom boot animation and screensaver media overlay for Onyx Boox C69HD.
+EOF
+touch {module_dir}/auto_mount
+chmod -R 755 {module_dir}
+"""
+            self._run_su_script(setup_cmds)
+
+            # Push to tmp then move
+            tmp_remote = f"/data/local/tmp/{target_filename}"
+            self.adb.run_adb("push", temp_processed, tmp_remote)
+            move_cmds = f"""
+cp {tmp_remote} {module_media}/{target_filename}
+chmod 644 {module_media}/{target_filename}
+rm -f {tmp_remote}
+"""
+            self._run_su_script(move_cmds)
+            if os.path.exists(temp_processed):
+                os.remove(temp_processed)
+            return True, f"System {target} image successfully installed into Magisk media overlay! Survives reboots."
+
+    def open_device_screensaver_settings(self):
+        """Launches Onyx WallpaperActivity on device."""
+        self.adb.run_shell("am start -n com.onyx/.common.screen.ui.WallpaperActivity")
+        return True, "Opened Wallpaper Settings on Onyx device."
+
+    def create_bootanimation_zip(self, frame_paths, output_zip_path, fps=1):
+        """Creates an uncompressed bootanimation.zip required by Android."""
+        os.makedirs(os.path.dirname(output_zip_path), exist_ok=True)
+        temp_dir = os.path.join(os.path.dirname(output_zip_path), "_bootanim_temp")
+        part0_dir = os.path.join(temp_dir, "part0")
+        os.makedirs(part0_dir, exist_ok=True)
+
+        desc_content = f"{SCREEN_WIDTH} {SCREEN_HEIGHT} {fps}\np 0 0 part0\n"
+        with open(os.path.join(temp_dir, "desc.txt"), "w", newline="\n") as f:
+            f.write(desc_content)
+
+        for idx, fp in enumerate(frame_paths):
+            dest_frame = os.path.join(part0_dir, f"{idx:04d}.png")
+            self.process_image_for_c69hd(fp, dest_frame, convert_grayscale=True)
+
+        # Android REQUIRES ZIP_STORED (no compression) for bootanimation.zip
+        with zipfile.ZipFile(output_zip_path, "w", zipfile.ZIP_STORED) as z:
+            z.write(os.path.join(temp_dir, "desc.txt"), "desc.txt")
+            for root, _, files in os.walk(part0_dir):
+                for file in sorted(files):
+                    full_p = os.path.join(root, file)
+                    rel_p = os.path.relpath(full_p, temp_dir)
+                    z.write(full_p, rel_p)
+
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        return True
+
+    def install_bootanimation_zip(self, zip_path):
+        """Installs bootanimation.zip into Magisk custom media module."""
+        if not os.path.exists(zip_path):
+            return False, f"bootanimation.zip not found: {zip_path}"
+
+        module_dir = "/data/adb/modules/c69hd-custom-media"
+        module_media = f"{module_dir}/system/media"
+
+        setup_cmds = f"""
+mkdir -p {module_media}
+cat << 'EOF' > {module_dir}/module.prop
+id=c69hd-custom-media
+name=C69HD Custom Media Overlay
+version=1.0
+versionCode=1
+author=Zeusx212
+description=Systemless custom boot animation and screensaver media overlay for Onyx Boox C69HD.
+EOF
+touch {module_dir}/auto_mount
+chmod -R 755 {module_dir}
+"""
+        self._run_su_script(setup_cmds)
+
+        tmp_remote = "/data/local/tmp/bootanimation.zip"
+        self.adb.run_adb("push", zip_path, tmp_remote)
+        move_cmds = f"""
+cp {tmp_remote} {module_media}/bootanimation.zip
+chmod 644 {module_media}/bootanimation.zip
+rm -f {tmp_remote}
+"""
+        self._run_su_script(move_cmds)
+        return True, "Custom bootanimation.zip installed into Magisk media overlay! Reboot to see it."
+
+    def preview_bootanimation_on_device(self, duration_sec=4):
+        """Runs the live boot animation on device screen for verification without rebooting."""
+        self.adb.log(f"Triggering boot animation preview on device for {duration_sec}s...")
+        script = f"setprop ctl.start bootanim; sleep {duration_sec}; setprop ctl.stop bootanim; input keyevent KEYCODE_HOME"
+        self._run_su_script(script)
+        return True, "Boot animation played on device display."
+
+    def restore_stock_bootanimation(self):
+        """Removes custom bootanimation.zip from Magisk module overlay."""
+        cmd = "rm -f /data/adb/modules/c69hd-custom-media/system/media/bootanimation.zip"
+        self._run_su_script(cmd)
+        return True, "Custom boot animation removed. Device will use stock Onyx boot animation."
+
+    def _run_su_script(self, script_text):
+        """Executes multiline script with root privileges cleanly via stdin."""
+        import subprocess
+        full_cmd = [self.adb.adb_bin, "shell", "su", "-c", "sh"]
+        try:
+            res = subprocess.run(
+                full_cmd,
+                input=script_text,
+                text=True,
+                capture_output=True,
+                timeout=20,
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+            )
+            return res.returncode == 0, res.stdout, res.stderr
+        except Exception as e:
+            return False, "", str(e)
 
     # ==========================================
     # DEBLOATING
     # ==========================================
     def get_disabled_packages(self):
-        """Returns set of package names currently disabled on user 0."""
         ok, out, _ = self.adb.run_shell("pm list packages -d")
         disabled = set()
         if ok and out:
@@ -210,19 +391,16 @@ class DeviceOps:
         return disabled
 
     def disable_package(self, package_name):
-        """Disables a package for user 0 (fully reversible)."""
         ok, out, err = self.adb.run_shell(f"pm disable-user --user 0 {package_name}")
         self.adb.log(f"pm disable-user {package_name} -> {out or err}")
         return ok and "disabled" in out.lower()
 
     def enable_package(self, package_name):
-        """Re-enables a package."""
         ok, out, err = self.adb.run_shell(f"pm enable {package_name}")
         self.adb.log(f"pm enable {package_name} -> {out or err}")
         return ok and "enabled" in out.lower()
 
     def apply_safe_debloat_preset(self):
-        """Disables all safe cellular/telephony & Qualcomm SVA packages."""
         results = []
         for cat in DEBLOAT_CATALOG:
             if cat.get("safe_preset"):
@@ -235,7 +413,6 @@ class DeviceOps:
     # SYSTEM & DISPLAY SETTINGS
     # ==========================================
     def get_system_settings(self):
-        """Reads key device settings (timeout, telemetry, scanning, font scale, density)."""
         settings = {
             "screen_off_timeout": "300000",
             "send_action_app_error": "0",
@@ -267,7 +444,6 @@ class DeviceOps:
 
         ok, out, _ = self.adb.run_shell("wm density")
         if ok and out:
-            # Physical density: 212 / Override density: 200
             for l in out.splitlines():
                 if "density:" in l:
                     settings["density"] = l.split("density:")[-1].strip()
@@ -278,7 +454,6 @@ class DeviceOps:
         return settings
 
     def apply_system_settings(self, settings_dict):
-        """Applies updated system settings dictionary."""
         if "screen_off_timeout" in settings_dict:
             self.adb.run_shell(f"settings put system screen_off_timeout {settings_dict['screen_off_timeout']}")
         if "send_action_app_error" in settings_dict:
@@ -315,6 +490,9 @@ class DeviceOps:
         elif target == "systemui":
             self.adb.log("Restarting SystemUI...")
             return self.adb.run_shell("pkill -f com.android.systemui")
+        elif target == "sleep":
+            self.adb.log("Sending Power Key (Sleep)...")
+            return self.adb.run_shell("input keyevent KEYCODE_POWER")
         else:
             self.adb.log("Rebooting device...")
             return self.adb.run_adb("reboot")

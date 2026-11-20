@@ -1,5 +1,5 @@
 # Onyx Boox C69HD Customizer Dependencies
-# The GUI runs on pure standard library Python (Tkinter + ttk) with 0 mandatory dependencies.
+Pillow>=10.0.0
 
 # Optional: To package the application into a standalone Windows .exe
 pyinstaller>=5.0.0
