@@ -1634,7 +1634,8 @@ class MainWindow(ctk.CTk):
         threading.Thread(target=_run, daemon=True).start()
 
     def _action_install_magisk(self):
-        assets_apk = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "magisk.apk")
+        base_dir = getattr(sys, '_MEIPASS', os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        assets_apk = os.path.join(base_dir, "assets", "magisk.apk")
         if not os.path.exists(assets_apk):
             assets_apk = filedialog.askopenfilename(title="Select Magisk APK", filetypes=[("APK Files", "*.apk")])
             if not assets_apk:
@@ -1686,7 +1687,8 @@ class MainWindow(ctk.CTk):
         threading.Thread(target=_run, daemon=True).start()
 
     def _action_install_wake_module(self):
-        assets_zip = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "c69hd-wake.zip")
+        base_dir = getattr(sys, '_MEIPASS', os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        assets_zip = os.path.join(base_dir, "assets", "c69hd-wake.zip")
         if not os.path.exists(assets_zip):
             assets_zip = filedialog.askopenfilename(title="Select c69hd-wake.zip Module", filetypes=[("Zip Archive", "*.zip")])
             if not assets_zip:

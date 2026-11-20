@@ -24,7 +24,10 @@ def get_platform_tools_url():
 
 def get_default_install_dir():
     """Returns the default directory where platform-tools should be installed."""
-    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if getattr(sys, 'frozen', False):
+        base_dir = os.path.dirname(os.path.abspath(sys.executable))
+    else:
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     local_bin = os.path.join(base_dir, "bin", "platform-tools")
     return local_bin
 
@@ -40,8 +43,11 @@ def find_existing_platform_tools():
 
     candidate_dirs = []
 
-    # 1. Check local project bin directory
-    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    # 1. Check local project or executable bin directory
+    if getattr(sys, 'frozen', False):
+        base_dir = os.path.dirname(os.path.abspath(sys.executable))
+    else:
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     candidate_dirs.append(os.path.join(base_dir, "bin", "platform-tools"))
 
     # 2. Check standard Windows locations
