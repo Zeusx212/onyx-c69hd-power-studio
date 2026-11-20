@@ -119,6 +119,17 @@ class ADBManager:
         except Exception as e:
             return None, str(e)
 
+    def get_quick_serial(self):
+        """Quickly check for an attached ADB device serial in under 50ms."""
+        ok, out, _ = self.run_adb("devices")
+        if ok and out:
+            lines = [l.strip() for l in out.splitlines() if l.strip() and not l.startswith("*")]
+            for l in lines[1:]:
+                parts = l.split()
+                if len(parts) >= 2 and parts[1] == "device":
+                    return parts[0]
+        return None
+
     def get_connected_device_info(self):
         info = {
             "connected": False,

@@ -6,6 +6,7 @@ Screensaver Studio, Book Library Sync, E-Ink App Sideload Hub, Remote E-Ink Cont
 """
 
 import os
+import queue
 import threading
 import datetime
 import tkinter as tk
@@ -30,6 +31,9 @@ class MainWindow(ctk.CTk):
         self.adb = adb_manager
         self.ops = device_ops
         self.scrcpy = scrcpy_manager
+        self.device_info = {}
+        self._gui_queue = queue.Queue()
+
         self.adb.log_callback = self.append_log
         self.scrcpy.log_callback = self.append_log
 
@@ -60,6 +64,9 @@ class MainWindow(ctk.CTk):
 
         self.configure(fg_color=self.COLOR_MAIN_BG)
 
+        # Start thread-safe GUI dispatch loop
+        self._process_gui_queue()
+
         # Window close handler to terminate background scrcpy cleanly
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
@@ -74,6 +81,28 @@ class MainWindow(ctk.CTk):
 
         # Initial device probe
         self.refresh_device_status_async()
+
+    def dispatch(self, func, *args, **kwargs):
+        """Thread-safe queue dispatch to execute callbacks on the Tkinter main loop."""
+        self._gui_queue.put((func, args, kwargs))
+
+    def _process_gui_queue(self):
+        try:
+            while True:
+                func, args, kwargs = self._gui_queue.get_nowait()
+                try:
+                    func(*args, **kwargs)
+                except Exception as e:
+                    print(f"[GUI Dispatch Error] {e}")
+        except queue.Empty:
+            pass
+        except Exception:
+            pass
+        finally:
+            try:
+                self.after(30, self._process_gui_queue)
+            except Exception:
+                pass
 
     def _on_close(self):
         if self.scrcpy.is_running():
@@ -268,7 +297,32 @@ class MainWindow(ctk.CTk):
             padx=8,
             pady=4
         )
-        self.lbl_mirror_status.pack(anchor="w", padx=12, pady=(0, 12))
+        self.lbl_mirror_status.pack(anchor="w", padx=12, pady=(0, 6))
+
+        # Binary status
+        bin_path = self.scrcpy.get_binary_path()
+        bin_avail = self.scrcpy.is_available()
+        bin_desc = f"scrcpy ({os.path.basename(bin_path)})" if bin_avail else "scrcpy not found"
+        self.lbl_scrcpy_bin = ctk.CTkLabel(
+            ctrl_card,
+            text=f"Engine: {bin_desc}",
+            font=ctk.CTkFont(family="Segoe UI", size=10),
+            text_color=self.COLOR_GREEN if bin_avail else self.COLOR_RED
+        )
+        self.lbl_scrcpy_bin.pack(anchor="w", padx=12, pady=(0, 10))
+
+        if not bin_avail:
+            self.btn_install_scrcpy = ctk.CTkButton(
+                ctrl_card,
+                text="📥 Install Scrcpy (WinGet)",
+                height=28,
+                corner_radius=6,
+                fg_color="#0284C7",
+                hover_color="#0369A1",
+                font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+                command=self._action_install_scrcpy_winget
+            )
+            self.btn_install_scrcpy.pack(anchor="w", padx=12, pady=(0, 10))
 
         # Start / Stop Buttons
         btn_box = ctk.CTkFrame(ctrl_card, fg_color="transparent")
@@ -380,6 +434,7 @@ class MainWindow(ctk.CTk):
         # Native container for scrcpy SetParent
         self.scrcpy_container = tk.Frame(viewer_card, bg="#05070C", highlightthickness=0)
         self.scrcpy_container.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 12))
+        self.scrcpy_container.bind("<Configure>", lambda e: self.scrcpy.resize_embedded(e.width, e.height))
 
         # Placeholder label when scrcpy is not running
         self.lbl_container_placeholder = ctk.CTkLabel(
@@ -406,6 +461,26 @@ class MainWindow(ctk.CTk):
         if self.scrcpy.is_running():
             return
 
+        if not self.scrcpy.is_available():
+            messagebox.showerror(
+                "Scrcpy Not Found",
+                "scrcpy executable was not found on your PC.\n\n"
+                "Please click '📥 Install Scrcpy (WinGet)' or install via PowerShell:\n"
+                "winget install Genymobile.scrcpy"
+            )
+            return
+
+        serial = self.device_info.get("serial")
+        if not serial or serial in ("N/A", "Unknown"):
+            serial = self.adb.get_quick_serial()
+
+        if not serial:
+            messagebox.showwarning(
+                "Device Not Connected",
+                "Please connect your Onyx Boox C69HD via USB Debugging or Wi-Fi ADB before starting screen mirror."
+            )
+            return
+
         is_embedded = (self.var_mirror_mode.get() == "embedded")
         profile = self.opt_mirror_profile.get()
 
@@ -423,6 +498,7 @@ class MainWindow(ctk.CTk):
             bit_rate = "8M"
 
         options = {
+            "serial": serial,
             "max_size": max_size,
             "max_fps": max_fps,
             "bit_rate": bit_rate,
@@ -439,12 +515,13 @@ class MainWindow(ctk.CTk):
         self.lbl_mirror_status.configure(text="STATUS: STARTING...", fg_color=self.COLOR_AMBER, text_color="#FFFFFF")
         self.btn_start_mirror.configure(state="disabled")
 
-        def _on_stop_cb():
-            self.after(0, self._handle_scrcpy_stopped)
+        def _on_stop_cb(exit_code=0, error_msg=None):
+            self.dispatch(self._handle_scrcpy_stopped, exit_code, error_msg)
 
         ok, msg = self.scrcpy.start(container_hwnd=container_hwnd, options=options, on_stop=_on_stop_cb)
         if ok:
-            self.lbl_mirror_status.configure(text=f"STATUS: RUNNING ({max_size}px / {max_fps} FPS)", fg_color="#064E3B", text_color="#FFFFFF")
+            mode_desc = "Embedded" if is_embedded else "Pop-out"
+            self.lbl_mirror_status.configure(text=f"STATUS: RUNNING ({mode_desc} • {max_size}px / {max_fps} FPS)", fg_color="#064E3B", text_color="#FFFFFF")
             self.btn_stop_mirror.configure(state="normal")
             if is_embedded:
                 self.lbl_container_placeholder.place_forget()
@@ -455,13 +532,30 @@ class MainWindow(ctk.CTk):
 
     def _action_stop_scrcpy(self):
         self.scrcpy.stop()
-        self._handle_scrcpy_stopped()
+        self._handle_scrcpy_stopped(0, None)
 
-    def _handle_scrcpy_stopped(self):
-        self.lbl_mirror_status.configure(text="STATUS: IDLE", fg_color="#1E293B", text_color=self.COLOR_TEXT_MUTED)
+    def _handle_scrcpy_stopped(self, exit_code=0, error_msg=None):
         self.btn_start_mirror.configure(state="normal")
         self.btn_stop_mirror.configure(state="disabled")
         self.lbl_container_placeholder.place(relx=0.5, rely=0.5, anchor="center")
+        if exit_code not in (0, None):
+            self.lbl_mirror_status.configure(text=f"STATUS: EXITED (Code {exit_code})", fg_color=self.COLOR_RED, text_color="#FFFFFF")
+            if error_msg:
+                messagebox.showerror("Scrcpy Mirror Error", f"Scrcpy mirror stopped unexpectedly (exit code {exit_code}):\n\n{error_msg}")
+        else:
+            self.lbl_mirror_status.configure(text="STATUS: IDLE", fg_color="#1E293B", text_color=self.COLOR_TEXT_MUTED)
+
+    def _action_install_scrcpy_winget(self):
+        def _run():
+            self.append_log("Installing scrcpy via WinGet...")
+            res = subprocess.run(["winget", "install", "--id", "Genymobile.scrcpy", "--silent", "--accept-source-agreements", "--accept-package-agreements"], capture_output=True, text=True)
+            self.scrcpy.scrcpy_bin = self.scrcpy.locate_scrcpy_executable()
+            if self.scrcpy.is_available():
+                self.dispatch(lambda: messagebox.showinfo("Scrcpy Installed", "Scrcpy was installed successfully!"))
+                self.dispatch(lambda: self.lbl_scrcpy_bin.configure(text=f"Engine: scrcpy ({os.path.basename(self.scrcpy.get_binary_path())})", text_color=self.COLOR_GREEN))
+            else:
+                self.dispatch(lambda: messagebox.showerror("Install Failed", f"Could not install scrcpy automatically:\n{res.stderr or res.stdout}"))
+        threading.Thread(target=_run, daemon=True).start()
 
     # =========================================================================
     # PAGE: 1-CLICK PROFILES (PRESETS)
@@ -1118,10 +1212,14 @@ class MainWindow(ctk.CTk):
     def append_log(self, text):
         now = datetime.datetime.now().strftime("%H:%M:%S")
         msg = f"[{now}] {text}\n"
-        def _insert():
+        self.dispatch(self._insert_log_text, msg)
+
+    def _insert_log_text(self, msg):
+        try:
             self.txt_log.insert("end", msg)
             self.txt_log.see("end")
-        self.after(0, _insert)
+        except Exception:
+            pass
 
     def refresh_device_status_async(self):
         self.lbl_status_badge.configure(text="PROBING...", fg_color="#283042", text_color=self.COLOR_CYAN)
@@ -1129,9 +1227,10 @@ class MainWindow(ctk.CTk):
 
     def _worker_probe_device(self):
         info = self.adb.get_connected_device_info()
-        self.after(0, lambda: self._update_ui_device_status(info))
+        self.dispatch(self._update_ui_device_status, info)
 
     def _update_ui_device_status(self, info):
+        self.device_info = info
         if info["connected"]:
             if info["mode"] == "adb":
                 root_status = "Rooted" if info["rooted"] else "Unrooted"
@@ -1293,7 +1392,7 @@ class MainWindow(ctk.CTk):
             thumb = img.copy()
             thumb.thumbnail((200, 270), Image.Resampling.LANCZOS)
             self._ctk_screenshot_image = ctk.CTkImage(light_image=thumb, dark_image=thumb, size=thumb.size)
-            self.after(0, lambda: self.box_screenshot.configure(image=self._ctk_screenshot_image, text=""))
+            self.dispatch(lambda: self.box_screenshot.configure(image=self._ctk_screenshot_image, text=""))
         threading.Thread(target=_run, daemon=True).start()
 
     def _action_copy_screenshot_clipboard(self):
@@ -1528,15 +1627,15 @@ class MainWindow(ctk.CTk):
             # Synchronize dropdown selections to match device
             for opt in self.opt_long_press._values:
                 if f"[{res['longPressAction']}]" in opt:
-                    self.after(0, lambda o=opt: self.opt_long_press.set(o))
+                    self.dispatch(lambda o=opt: self.opt_long_press.set(o))
                     break
 
             for opt in self.opt_short_press._values:
                 if (not res['shortPressAction'] and "[Recommended]" in opt) or (res['shortPressAction'] and f"[{res['shortPressAction']}]" in opt):
-                    self.after(0, lambda o=opt: self.opt_short_press.set(o))
+                    self.dispatch(lambda o=opt: self.opt_short_press.set(o))
                     break
 
-            self.after(0, lambda: self.lbl_active_mapping.configure(text=txt))
+            self.dispatch(lambda: self.lbl_active_mapping.configure(text=txt))
         threading.Thread(target=_run, daemon=True).start()
 
     def _action_reset_button_remap(self):
@@ -1561,9 +1660,9 @@ class MainWindow(ctk.CTk):
             item["disabled"] = is_dis
             btn = item["button"]
             if is_dis:
-                self.after(0, lambda b=btn, p=pkg: b.configure(text="Enable", fg_color="#283042", hover_color="#37435C", command=lambda: self._toggle_package(p, False)))
+                self.dispatch(lambda b=btn, p=pkg: b.configure(text="Enable", fg_color="#283042", hover_color="#37435C", command=lambda: self._toggle_package(p, False)))
             else:
-                self.after(0, lambda b=btn, p=pkg: b.configure(text="Disable", fg_color=self.COLOR_RED, hover_color="#DC2626", command=lambda: self._toggle_package(p, True)))
+                self.dispatch(lambda b=btn, p=pkg: b.configure(text="Disable", fg_color=self.COLOR_RED, hover_color="#DC2626", command=lambda: self._toggle_package(p, True)))
 
     def _toggle_package(self, pkg_name, disable):
         def _run():
@@ -1644,13 +1743,13 @@ class MainWindow(ctk.CTk):
     def _action_query_settings_silent(self):
         def _run():
             s = self.ops.get_system_settings()
-            self.after(0, lambda: self._update_settings_ui(s, show_dialog=False))
+            self.dispatch(self._update_settings_ui, s, False)
         threading.Thread(target=_run, daemon=True).start()
 
     def _action_query_settings(self):
         def _run():
             s = self.ops.get_system_settings()
-            self.after(0, lambda: self._update_settings_ui(s, show_dialog=True))
+            self.dispatch(self._update_settings_ui, s, True)
         threading.Thread(target=_run, daemon=True).start()
 
     def _update_settings_ui(self, s, show_dialog=False):
