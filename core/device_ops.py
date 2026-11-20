@@ -30,6 +30,99 @@ BUTTON_ACTIONS = {
     "toggleFrontLight": "Factory Default (Toggle Frontlight - No HW on C69HD)",
 }
 
+# Supported side button keycodes for E-Reader navigation
+SIDE_BUTTON_KEYCODES = [
+    ("PAGE_UP", "PAGE_UP (Previous Page / Scroll Up)"),
+    ("PAGE_DOWN", "PAGE_DOWN (Next Page / Scroll Down)"),
+    ("VOLUME_UP", "VOLUME_UP (Kindle, Moon+, Koreader Previous)"),
+    ("VOLUME_DOWN", "VOLUME_DOWN (Kindle, Moon+, Koreader Next)"),
+    ("DPAD_UP", "DPAD_UP (Up Navigation / Scroll)"),
+    ("DPAD_DOWN", "DPAD_DOWN (Down Navigation / Scroll)"),
+    ("DPAD_LEFT", "DPAD_LEFT (Left Navigation)"),
+    ("DPAD_RIGHT", "DPAD_RIGHT (Right Navigation)"),
+    ("BACK", "BACK (Return / Exit)"),
+    ("HOME", "HOME (Go to Home Launcher)"),
+    ("APP_SWITCH", "APP_SWITCH (Recent Apps Switcher)"),
+    ("FORWARD", "FORWARD (Browser Forward)"),
+    ("MEDIA_PREVIOUS", "MEDIA_PREVIOUS (Previous Track/Page)"),
+    ("MEDIA_NEXT", "MEDIA_NEXT (Next Track/Page)"),
+    ("ZOOM_IN", "ZOOM_IN (Enlarge Text / Zoom In)"),
+    ("ZOOM_OUT", "ZOOM_OUT (Shrink Text / Zoom Out)"),
+    ("BRIGHTNESS_UP", "BRIGHTNESS_UP (Increase Brightness)"),
+    ("BRIGHTNESS_DOWN", "BRIGHTNESS_DOWN (Decrease Brightness)"),
+]
+
+# Curated side button remapping presets
+SIDE_BUTTON_PRESETS = [
+    {
+        "id": "PAGE_TURN_DEFAULT",
+        "name": "📖 Page Turn (Default Onyx): Top = PAGE_UP, Bottom = PAGE_DOWN",
+        "top": "PAGE_UP",
+        "bottom": "PAGE_DOWN",
+        "desc": "Standard NeoReader and Onyx OS page-turn mapping."
+    },
+    {
+        "id": "VOLUME_KEYS",
+        "name": "🔊 Volume Buttons: Top = VOLUME_UP, Bottom = VOLUME_DOWN",
+        "top": "VOLUME_UP",
+        "bottom": "VOLUME_DOWN",
+        "desc": "Recommended for Kindle, Moon+ Reader, Mihon/Tachiyomi, Librera, and KOReader."
+    },
+    {
+        "id": "INVERTED_PAGE_TURN",
+        "name": "🔄 Inverted Page Turn: Top = PAGE_DOWN, Bottom = PAGE_UP",
+        "top": "PAGE_DOWN",
+        "bottom": "PAGE_UP",
+        "desc": "Top button advances to next page (ergonomic for left-handed reading)."
+    },
+    {
+        "id": "INVERTED_VOLUME",
+        "name": "🔉 Inverted Volume: Top = VOLUME_DOWN, Bottom = VOLUME_UP",
+        "top": "VOLUME_DOWN",
+        "bottom": "VOLUME_UP",
+        "desc": "Top button advances page in apps configured for volume key navigation."
+    },
+    {
+        "id": "DPAD_NAV",
+        "name": "⬆️ D-Pad Directional: Top = DPAD_UP, Bottom = DPAD_DOWN",
+        "top": "DPAD_UP",
+        "bottom": "DPAD_DOWN",
+        "desc": "Smooth vertical scrolling in web browsers (EinkBro, Chrome) and article lists."
+    },
+    {
+        "id": "READER_BACK",
+        "name": "↩️ Reader + Back: Top = PAGE_DOWN, Bottom = BACK",
+        "top": "PAGE_DOWN",
+        "bottom": "BACK",
+        "desc": "Top button turns page forward; bottom button exits/returns back."
+    },
+    {
+        "id": "HOME_BACK",
+        "name": "🏠 Home + Back: Top = HOME, Bottom = BACK",
+        "top": "HOME",
+        "bottom": "BACK",
+        "desc": "Full system navigation keys on physical side buttons."
+    },
+    {
+        "id": "CUSTOM",
+        "name": "⚙️ Custom Keycode Pair (User-Selected)",
+        "top": "",
+        "bottom": "",
+        "desc": "Select any individual keycode for top and bottom side buttons."
+    }
+]
+
+# Side button long-press actions supported by Onyx framework
+SIDE_BUTTON_LONG_ACTIONS = {
+    "none": "No Action (Standard Hardware Press)",
+    "fullRefreshScreen": "Full Screen E-Ink Refresh (Clears Ghosting)",
+    "screenshot": "Take Screenshot",
+    "toggleA2": "Toggle A2 High-Speed Refresh Mode",
+    "showRefreshModeDialog": "Open E-Ink Refresh Mode Dialog",
+    "back_to_home": "Return to Home Screen",
+    "KEYCODE_APP_SWITCH": "Recent Apps Switcher",
+}
+
 # Curated list of debloat targets for C69HD
 DEBLOAT_CATALOG = [
     {
@@ -258,6 +351,132 @@ class DeviceOps:
 
     def reset_button_mapping(self):
         return self.apply_button_mapping(long_action="toggleFrontLight", short_action="")
+
+    # ==========================================
+    # SIDE BUTTONS (PAGE TURN KEYS) REMAPPING
+    # ==========================================
+    def get_current_side_button_mapping(self):
+        """
+        Reads physical side button layout (gpio-keys.kl: top=key 104, bottom=key 109)
+        and Onyx OS side button long-press settings.
+        """
+        # 1. Read key layout file
+        # Check Magisk module overlay first, then fallback to stock /system
+        kl_cmd = (
+            "if [ -f /data/adb/modules/c69hd-custom-media/system/usr/keylayout/gpio-keys.kl ]; then "
+            "cat /data/adb/modules/c69hd-custom-media/system/usr/keylayout/gpio-keys.kl; "
+            "else cat /system/usr/keylayout/gpio-keys.kl; fi"
+        )
+        ok_kl, out_kl, _ = self.adb.run_shell(f"su -c '{kl_cmd}'")
+
+        top_key = "PAGE_UP"
+        bottom_key = "PAGE_DOWN"
+        if ok_kl and out_kl:
+            for line in out_kl.splitlines():
+                parts = line.strip().split()
+                if len(parts) >= 3 and parts[0] == "key":
+                    if parts[1] == "104":
+                        top_key = parts[2]
+                    elif parts[1] == "109":
+                        bottom_key = parts[2]
+
+        # 2. Read Onyx long-press settings
+        _, out_lp, _ = self.adb.run_shell("settings get global key_custom_side_key_long_press_enable")
+        lp_enabled = (out_lp.strip() == "1")
+
+        _, out_top_lp, _ = self.adb.run_shell("settings get global key_custom_side_key_long_press_up")
+        top_long = out_top_lp.strip() if out_top_lp and out_top_lp != "null" else "none"
+
+        _, out_bot_lp, _ = self.adb.run_shell("settings get global key_custom_side_key_long_press_down")
+        bottom_long = out_bot_lp.strip() if out_bot_lp and out_bot_lp != "null" else "none"
+
+        # 3. Detect matching preset
+        matched_preset_id = "CUSTOM"
+        for p in SIDE_BUTTON_PRESETS:
+            if p["id"] != "CUSTOM" and p["top"] == top_key and p["bottom"] == bottom_key:
+                matched_preset_id = p["id"]
+                break
+
+        return {
+            "top_key": top_key,
+            "bottom_key": bottom_key,
+            "long_press_enabled": lp_enabled,
+            "top_long": top_long,
+            "bottom_long": bottom_long,
+            "preset_id": matched_preset_id
+        }
+
+    def apply_side_button_mapping(self, top_key="PAGE_UP", bottom_key="PAGE_DOWN", top_long="none", bottom_long="none"):
+        """
+        Applies side button key layout remapping to gpio-keys.kl via systemless Magisk module
+        and bind-mount for immediate effect, plus configures Onyx framework long-press actions.
+        """
+        top_key = top_key.strip().upper()
+        bottom_key = bottom_key.strip().upper()
+
+        if not top_key or not bottom_key:
+            return False, "Both top and bottom keycodes must be specified."
+
+        self.adb.log(f"Applying side button remap: Top='{top_key}', Bottom='{bottom_key}', TopLong='{top_long}', BotLong='{bottom_long}'")
+
+        # 1. Generate compliant gpio-keys.kl
+        kl_content = (
+            "# Onyx Boox C69HD Remapped Keylayout\n"
+            "key 115   VOLUME_UP\n"
+            "key 114   VOLUME_DOWN\n"
+            "key 102   HOME\n"
+            "key 528   FOCUS\n"
+            "key 766   CAMERA\n"
+            f"key 104   {top_key}\n"
+            f"key 109   {bottom_key}\n"
+        )
+
+        # 2. Write to Magisk module for persistent systemless overlay across reboots
+        magisk_target = "/data/adb/modules/c69hd-custom-media/system/usr/keylayout/gpio-keys.kl"
+        create_script = (
+            f"cat << 'EOF' > /data/local/tmp/gpio-keys.kl\n{kl_content}\nEOF\n"
+            "mkdir -p /data/adb/modules/c69hd-custom-media/system/usr/keylayout\n"
+            f"cp /data/local/tmp/gpio-keys.kl {magisk_target}\n"
+            f"chmod 644 {magisk_target}\n"
+            f"mount -o bind {magisk_target} /system/usr/keylayout/gpio-keys.kl 2>/dev/null || true\n"
+            "rm -f /data/local/tmp/gpio-keys.kl\n"
+        )
+
+        ok_kl, out_kl, err_kl = self.adb.run_shell(f"su -c '{create_script}'")
+        if not ok_kl:
+            self.adb.log(f"Failed to write gpio-keys.kl: {out_kl or err_kl}")
+            return False, f"Failed to deploy keylayout: {out_kl or err_kl}"
+
+        # 3. Configure Onyx framework long-press settings
+        has_long = (top_long != "none" or bottom_long != "none")
+        if has_long:
+            self.adb.run_shell("settings put global key_custom_side_key_long_press_enable 1")
+            self.adb.run_shell(f"settings put global key_custom_side_key_long_press_up '{top_long}'")
+            self.adb.run_shell(f"settings put global key_custom_side_key_long_press_down '{bottom_long}'")
+        else:
+            self.adb.run_shell("settings put global key_custom_side_key_long_press_enable 0")
+            self.adb.run_shell("settings put global key_custom_side_key_long_press_up 'none'")
+            self.adb.run_shell("settings put global key_custom_side_key_long_press_down 'none'")
+
+        # 4. Broadcast refresh to Onyx input manager
+        self.adb.run_shell("am broadcast -a onyx.action.refresh_keymapping")
+        self.adb.log("Side buttons remapped successfully.")
+        return True, f"Side buttons successfully remapped to Top: {top_key}, Bottom: {bottom_key}!"
+
+    def reset_side_button_mapping(self):
+        """Resets physical side buttons to Onyx factory default (PAGE_UP / PAGE_DOWN)."""
+        # Remove custom module override if present
+        cleanup_script = (
+            "umount /system/usr/keylayout/gpio-keys.kl 2>/dev/null || true\n"
+            "rm -f /data/adb/modules/c69hd-custom-media/system/usr/keylayout/gpio-keys.kl\n"
+        )
+        self.adb.run_shell(f"su -c '{cleanup_script}'")
+        self.adb.run_shell("settings put global key_custom_side_key_long_press_enable 0")
+        self.adb.run_shell("settings put global key_custom_side_key_long_press_up 'none'")
+        self.adb.run_shell("settings put global key_custom_side_key_long_press_down 'none'")
+        self.adb.run_shell("am broadcast -a onyx.action.refresh_keymapping")
+        self.adb.log("Reset side buttons to factory defaults.")
+        return True, "Side buttons reset to factory defaults (PAGE_UP / PAGE_DOWN)."
 
     # ==========================================
     # PERSONALIZATION: SCREENSAVER & BOOT MEDIA

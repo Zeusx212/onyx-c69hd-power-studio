@@ -74,6 +74,26 @@ def find_existing_platform_tools():
         if user_prof:
             candidate_dirs.append(os.path.join(user_prof, "platform-tools"))
 
+    elif sys.platform == "darwin":
+        candidate_dirs.extend([
+            "/opt/homebrew/bin",
+            "/usr/local/bin",
+            os.path.expanduser("~/Library/Android/sdk/platform-tools"),
+            os.path.expanduser("~/Android/Sdk/platform-tools"),
+            os.path.expanduser("~/platform-tools"),
+            "/opt/local/bin",
+        ])
+
+    else:  # Linux
+        candidate_dirs.extend([
+            "/usr/bin",
+            "/usr/local/bin",
+            os.path.expanduser("~/Android/Sdk/platform-tools"),
+            os.path.expanduser("~/.android-sdk/platform-tools"),
+            os.path.expanduser("~/platform-tools"),
+            os.path.expanduser("~/.local/bin"),
+        ])
+
     # Check candidates
     found_adb = None
     found_fastboot = None
@@ -124,10 +144,32 @@ def find_existing_platform_tools():
 
 def add_directory_to_user_path(directory):
     """
-    Adds a directory to Windows User Environment PATH registry and broadcasts WM_SETTINGCHANGE.
+    Adds a directory to Windows User Environment PATH registry or Linux/macOS shell profiles.
     Returns True if successfully added or already present.
     """
+    directory = os.path.abspath(directory)
     if sys.platform != "win32":
+        shell = os.environ.get("SHELL", "")
+        profile_candidates = []
+        if sys.platform == "darwin" or "zsh" in shell:
+            profile_candidates.append(os.path.expanduser("~/.zshrc"))
+        profile_candidates.extend([
+            os.path.expanduser("~/.bashrc"),
+            os.path.expanduser("~/.profile"),
+            os.path.expanduser("~/.bash_profile")
+        ])
+        export_line = f'export PATH="{directory}:$PATH"\n'
+        for p in profile_candidates:
+            if os.path.exists(p):
+                try:
+                    with open(p, "r", encoding="utf-8") as f:
+                        content = f.read()
+                    if directory not in content:
+                        with open(p, "a", encoding="utf-8") as f:
+                            f.write(f"\n# Added by Onyx Boox C69HD Power Studio\n{export_line}")
+                    return True
+                except Exception:
+                    pass
         return True
 
     directory = os.path.abspath(directory)

@@ -16,6 +16,9 @@ from PIL import Image, ImageTk
 
 from core.device_ops import (
     BUTTON_ACTIONS,
+    SIDE_BUTTON_PRESETS,
+    SIDE_BUTTON_KEYCODES,
+    SIDE_BUTTON_LONG_ACTIONS,
     DEBLOAT_CATALOG,
     CURATED_EINK_APPS,
     HAS_PILLOW
@@ -271,6 +274,13 @@ class MainWindow(ctk.CTk):
                 btn.configure(fg_color="#1A202C", text_color=self.COLOR_CYAN, font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"))
             else:
                 btn.configure(fg_color="transparent", text_color=self.COLOR_TEXT_MUTED, font=ctk.CTkFont(family="Segoe UI", size=12, weight="normal"))
+
+        if page_id == "button":
+            try:
+                self._action_read_side_button_remap()
+                self._action_read_button_remap()
+            except Exception:
+                pass
 
     # =========================================================================
     # PAGE: LIVE SCREEN MIRROR (SCRCPY INTEGRATION)
@@ -890,25 +900,102 @@ class MainWindow(ctk.CTk):
 
         lbl_h = ctk.CTkLabel(page, text="Hardware Button Remapper", font=ctk.CTkFont(family="Segoe UI", size=22, weight="bold"), text_color="#FFFFFF")
         lbl_h.pack(anchor="w", pady=(0, 4))
-        lbl_sub = ctk.CTkLabel(page, text="Customize the center physical button (KEYCODE_BACK) on your Onyx Boox C69HD.", font=ctk.CTkFont(family="Segoe UI", size=12), text_color=self.COLOR_TEXT_MUTED)
+        lbl_sub = ctk.CTkLabel(page, text="Customize the physical side page-turn buttons and center front button on your Onyx Boox C69HD.", font=ctk.CTkFont(family="Segoe UI", size=12), text_color=self.COLOR_TEXT_MUTED)
         lbl_sub.pack(anchor="w", pady=(0, 16))
 
-        info_banner = ctk.CTkFrame(page, corner_radius=10, fg_color="#1E2638", border_width=1, border_color="#2E3A54")
-        info_banner.pack(fill="x", pady=6)
+        # ==========================================
+        # CARD 1: PHYSICAL SIDE BUTTONS (PAGE TURN)
+        # ==========================================
+        c_side = ctk.CTkFrame(page, corner_radius=12, fg_color=self.COLOR_CARD, border_width=1, border_color=self.COLOR_CARD_BORDER)
+        c_side.pack(fill="x", pady=(0, 12))
+
+        ctk.CTkLabel(c_side, text="📱 Physical Side Page-Turn Buttons (gpio-keys: Top=104, Bottom=109)", font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"), text_color=self.COLOR_CYAN).pack(anchor="w", padx=18, pady=(16, 6))
+
+        side_info = ctk.CTkFrame(c_side, corner_radius=8, fg_color="#182234", border_width=1, border_color="#24334C")
+        side_info.pack(fill="x", padx=18, pady=(0, 12))
         ctk.CTkLabel(
-            info_banner,
-            text="💡 Why Remap? The C69HD has NO frontlight hardware. The factory default action\n"
-                 "for holding the front button is toggling the backlight—which does nothing!\n"
-                 "Remap it to Recent Apps (App Switcher) for instant multitasking.",
-            font=ctk.CTkFont(family="Segoe UI", size=12),
+            side_info,
+            text="💡 Many third-party reading apps (Kindle, Moon+ Reader, Mihon, Librera, KOReader) only turn pages\n"
+                 "when Volume Keys are pressed. Switch to the 'Volume Buttons' preset to make side buttons work in any app!\n"
+                 "Changes persist across reboots via the systemless Magisk module.",
+            font=ctk.CTkFont(family="Segoe UI", size=11),
             text_color="#CBD5E1",
             justify="left"
-        ).pack(anchor="w", padx=16, pady=12)
+        ).pack(anchor="w", padx=12, pady=10)
 
+        # Quick Preset Selector
+        ctk.CTkLabel(c_side, text="Quick Remap Preset:", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold")).pack(anchor="w", padx=18, pady=(4, 4))
+        preset_names = [p["name"] for p in SIDE_BUTTON_PRESETS]
+        self.opt_side_preset = ctk.CTkOptionMenu(
+            c_side,
+            height=36,
+            corner_radius=8,
+            values=preset_names,
+            width=550,
+            command=self._on_side_preset_selected
+        )
+        self.opt_side_preset.set(preset_names[0])
+        self.opt_side_preset.pack(anchor="w", padx=18, pady=(0, 12))
+
+        # 2-Column layout for Top & Bottom buttons
+        cols_frame = ctk.CTkFrame(c_side, fg_color="transparent")
+        cols_frame.pack(fill="x", padx=18, pady=(0, 12))
+        cols_frame.grid_columnconfigure(0, weight=1)
+        cols_frame.grid_columnconfigure(1, weight=1)
+
+        # Left Column: Top Button
+        col_top = ctk.CTkFrame(cols_frame, corner_radius=8, fg_color="#131926", border_width=1, border_color="#202A3D")
+        col_top.grid(row=0, column=0, sticky="nsew", padx=(0, 6), pady=0)
+
+        ctk.CTkLabel(col_top, text="▲ Top Side Button (Key 104)", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"), text_color="#38BDF8").pack(anchor="w", padx=12, pady=(10, 4))
+
+        ctk.CTkLabel(col_top, text="Keycode Sent:", font=ctk.CTkFont(family="Segoe UI", size=11)).pack(anchor="w", padx=12, pady=(4, 2))
+        keycode_names = [k[1] for k in SIDE_BUTTON_KEYCODES]
+        self.opt_side_top = ctk.CTkOptionMenu(col_top, height=32, corner_radius=6, values=keycode_names, width=280)
+        self.opt_side_top.set(keycode_names[0])
+        self.opt_side_top.pack(anchor="w", padx=12, pady=(0, 8))
+
+        ctk.CTkLabel(col_top, text="Hold / Long-Press Action (Onyx OS):", font=ctk.CTkFont(family="Segoe UI", size=11)).pack(anchor="w", padx=12, pady=(4, 2))
+        long_action_names = [f"{v} [{k}]" for k, v in SIDE_BUTTON_LONG_ACTIONS.items()]
+        self.opt_side_top_long = ctk.CTkOptionMenu(col_top, height=32, corner_radius=6, values=long_action_names, width=280)
+        self.opt_side_top_long.set(long_action_names[0])
+        self.opt_side_top_long.pack(anchor="w", padx=12, pady=(0, 12))
+
+        # Right Column: Bottom Button
+        col_bot = ctk.CTkFrame(cols_frame, corner_radius=8, fg_color="#131926", border_width=1, border_color="#202A3D")
+        col_bot.grid(row=0, column=1, sticky="nsew", padx=(6, 0), pady=0)
+
+        ctk.CTkLabel(col_bot, text="▼ Bottom Side Button (Key 109)", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"), text_color="#38BDF8").pack(anchor="w", padx=12, pady=(10, 4))
+
+        ctk.CTkLabel(col_bot, text="Keycode Sent:", font=ctk.CTkFont(family="Segoe UI", size=11)).pack(anchor="w", padx=12, pady=(4, 2))
+        self.opt_side_bottom = ctk.CTkOptionMenu(col_bot, height=32, corner_radius=6, values=keycode_names, width=280)
+        self.opt_side_bottom.set(keycode_names[1])
+        self.opt_side_bottom.pack(anchor="w", padx=12, pady=(0, 8))
+
+        ctk.CTkLabel(col_bot, text="Hold / Long-Press Action (Onyx OS):", font=ctk.CTkFont(family="Segoe UI", size=11)).pack(anchor="w", padx=12, pady=(4, 2))
+        self.opt_side_bottom_long = ctk.CTkOptionMenu(col_bot, height=32, corner_radius=6, values=long_action_names, width=280)
+        self.opt_side_bottom_long.set(long_action_names[0])
+        self.opt_side_bottom_long.pack(anchor="w", padx=12, pady=(0, 12))
+
+        # Action Buttons for Side Keys
+        side_btn_box = ctk.CTkFrame(c_side, fg_color="transparent")
+        side_btn_box.pack(anchor="w", padx=18, pady=(0, 14))
+
+        ctk.CTkButton(side_btn_box, text="💾  Apply Side Buttons Mapping", height=38, corner_radius=8, fg_color=self.COLOR_BLUE, command=self._action_apply_side_button_remap).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(side_btn_box, text="📖  Query Current Side Keys", height=38, corner_radius=8, fg_color="#283042", command=self._action_read_side_button_remap).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(side_btn_box, text="🔄  Reset Side Keys to Factory", height=38, corner_radius=8, fg_color=self.COLOR_RED, command=self._action_reset_side_button_remap).pack(side="left")
+
+        # Active Status Label for Side Keys
+        self.lbl_active_side_mapping = ctk.CTkLabel(c_side, text="Click 'Query Current Side Keys' to inspect active configuration...", font=ctk.CTkFont(family="Consolas", size=11), text_color="#38BDF8", justify="left")
+        self.lbl_active_side_mapping.pack(anchor="w", padx=18, pady=(0, 16))
+
+        # ==========================================
+        # CARD 2: CENTER FRONT BUTTON (KEYCODE_BACK)
+        # ==========================================
         c_config = ctk.CTkFrame(page, corner_radius=12, fg_color=self.COLOR_CARD, border_width=1, border_color=self.COLOR_CARD_BORDER)
-        c_config.pack(fill="x", pady=10)
+        c_config.pack(fill="x", pady=6)
 
-        ctk.CTkLabel(c_config, text="Configure Center Physical Button Actions", font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"), text_color=self.COLOR_CYAN).pack(anchor="w", padx=18, pady=(16, 12))
+        ctk.CTkLabel(c_config, text="🔘 Center Physical Button Actions (KEYCODE_BACK)", font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"), text_color=self.COLOR_CYAN).pack(anchor="w", padx=18, pady=(16, 12))
 
         ctk.CTkLabel(c_config, text="Long-Press (Hold) Action:", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold")).pack(anchor="w", padx=18, pady=(4, 4))
         self.opt_long_press = ctk.CTkOptionMenu(c_config, height=36, corner_radius=8, values=[f"{v} [{k}]" if k else f"{v} [Standard Back]" for k, v in BUTTON_ACTIONS.items()], width=550)
@@ -921,18 +1008,14 @@ class MainWindow(ctk.CTk):
         self.opt_short_press.pack(anchor="w", padx=18, pady=(0, 16))
 
         btn_box = ctk.CTkFrame(c_config, fg_color="transparent")
-        btn_box.pack(anchor="w", padx=18, pady=(0, 18))
+        btn_box.pack(anchor="w", padx=18, pady=(0, 14))
 
-        ctk.CTkButton(btn_box, text="💾  Apply Mapping to Device", height=38, corner_radius=8, fg_color=self.COLOR_BLUE, command=self._action_apply_button_remap).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(btn_box, text="📖  Query Current Mapping", height=38, corner_radius=8, fg_color="#283042", command=self._action_read_button_remap).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(btn_box, text="💾  Apply Center Button Mapping", height=38, corner_radius=8, fg_color=self.COLOR_BLUE, command=self._action_apply_button_remap).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(btn_box, text="📖  Query Center Button", height=38, corner_radius=8, fg_color="#283042", command=self._action_read_button_remap).pack(side="left", padx=(0, 8))
         ctk.CTkButton(btn_box, text="🔄  Reset to Factory Default", height=38, corner_radius=8, fg_color=self.COLOR_RED, command=self._action_reset_button_remap).pack(side="left")
 
-        c_active = ctk.CTkFrame(page, corner_radius=12, fg_color=self.COLOR_CARD, border_width=1, border_color=self.COLOR_CARD_BORDER)
-        c_active.pack(fill="x", pady=6)
-
-        ctk.CTkLabel(c_active, text="Active Mapping in Device Settings.Global", font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"), text_color=self.COLOR_CYAN).pack(anchor="w", padx=18, pady=(14, 4))
-        self.lbl_active_mapping = ctk.CTkLabel(c_active, text="Click 'Query Current Mapping' to check connected device...", font=ctk.CTkFont(family="Consolas", size=11), text_color="#38BDF8", justify="left")
-        self.lbl_active_mapping.pack(anchor="w", padx=18, pady=(0, 14))
+        self.lbl_active_mapping = ctk.CTkLabel(c_config, text="Click 'Query Center Button' to check connected device...", font=ctk.CTkFont(family="Consolas", size=11), text_color="#38BDF8", justify="left")
+        self.lbl_active_mapping.pack(anchor="w", padx=18, pady=(0, 16))
 
         return page
 
@@ -1716,6 +1799,98 @@ class MainWindow(ctk.CTk):
                 messagebox.showinfo("Module Installed", msg)
             else:
                 messagebox.showerror("Module Error", msg)
+        threading.Thread(target=_run, daemon=True).start()
+
+    def _on_side_preset_selected(self, preset_name):
+        for p in SIDE_BUTTON_PRESETS:
+            if p["name"] == preset_name and p["id"] != "CUSTOM":
+                top_str = next((k[1] for k in SIDE_BUTTON_KEYCODES if k[0] == p["top"]), None)
+                bot_str = next((k[1] for k in SIDE_BUTTON_KEYCODES if k[0] == p["bottom"]), None)
+                if top_str:
+                    self.opt_side_top.set(top_str)
+                if bot_str:
+                    self.opt_side_bottom.set(bot_str)
+                break
+
+    def _action_apply_side_button_remap(self):
+        top_val = self.opt_side_top.get()
+        bot_val = self.opt_side_bottom.get()
+
+        top_key = top_val.split()[0]
+        bot_key = bot_val.split()[0]
+
+        top_long_val = self.opt_side_top_long.get()
+        bot_long_val = self.opt_side_bottom_long.get()
+
+        top_long = "none"
+        for k in SIDE_BUTTON_LONG_ACTIONS:
+            if f"[{k}]" in top_long_val:
+                top_long = k
+                break
+
+        bot_long = "none"
+        for k in SIDE_BUTTON_LONG_ACTIONS:
+            if f"[{k}]" in bot_long_val:
+                bot_long = k
+                break
+
+        def _run():
+            ok, msg = self.ops.apply_side_button_mapping(
+                top_key=top_key,
+                bottom_key=bot_key,
+                top_long=top_long,
+                bottom_long=bot_long
+            )
+            if ok:
+                messagebox.showinfo("Side Buttons Remapped", msg)
+                self._action_read_side_button_remap()
+            else:
+                messagebox.showerror("Remap Error", msg)
+        threading.Thread(target=_run, daemon=True).start()
+
+    def _action_read_side_button_remap(self):
+        def _run():
+            res = self.ops.get_current_side_button_mapping()
+            txt = (
+                f"Top Side Key (104)   : {res['top_key']}\n"
+                f"Bottom Side Key (109): {res['bottom_key']}\n"
+                f"Long-Press Enabled   : {res['long_press_enabled']}\n"
+                f"Top Long-Press       : {res['top_long']}\n"
+                f"Bottom Long-Press    : {res['bottom_long']}\n"
+                f"Active Preset        : {res['preset_id']}"
+            )
+
+            top_str = next((k[1] for k in SIDE_BUTTON_KEYCODES if k[0] == res["top_key"]), None)
+            bot_str = next((k[1] for k in SIDE_BUTTON_KEYCODES if k[0] == res["bottom_key"]), None)
+            if top_str:
+                self.dispatch(lambda: self.opt_side_top.set(top_str))
+            if bot_str:
+                self.dispatch(lambda: self.opt_side_bottom.set(bot_str))
+
+            for opt in self.opt_side_top_long._values:
+                if f"[{res['top_long']}]" in opt:
+                    self.dispatch(lambda o=opt: self.opt_side_top_long.set(o))
+                    break
+
+            for opt in self.opt_side_bottom_long._values:
+                if f"[{res['bottom_long']}]" in opt:
+                    self.dispatch(lambda o=opt: self.opt_side_bottom_long.set(o))
+                    break
+
+            preset_obj = next((p for p in SIDE_BUTTON_PRESETS if p["id"] == res["preset_id"]), None)
+            if preset_obj:
+                self.dispatch(lambda: self.opt_side_preset.set(preset_obj["name"]))
+
+            self.dispatch(lambda: self.lbl_active_side_mapping.configure(text=txt))
+        threading.Thread(target=_run, daemon=True).start()
+
+    def _action_reset_side_button_remap(self):
+        if not messagebox.askyesno("Reset Side Buttons", "Reset physical side buttons to Onyx factory default (PAGE_UP / PAGE_DOWN)?"):
+            return
+        def _run():
+            self.ops.reset_side_button_mapping()
+            self._action_read_side_button_remap()
+            messagebox.showinfo("Reset", "Side buttons reset to factory defaults.")
         threading.Thread(target=_run, daemon=True).start()
 
     def _action_apply_button_remap(self):

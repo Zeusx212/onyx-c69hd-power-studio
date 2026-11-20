@@ -19,8 +19,17 @@ if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
 from core.adb_manager import ADBManager
-from core.device_ops import DeviceOps, BUTTON_ACTIONS, DEBLOAT_CATALOG, CURATED_EINK_APPS
+from core.device_ops import (
+    DeviceOps,
+    BUTTON_ACTIONS,
+    SIDE_BUTTON_PRESETS,
+    SIDE_BUTTON_KEYCODES,
+    SIDE_BUTTON_LONG_ACTIONS,
+    DEBLOAT_CATALOG,
+    CURATED_EINK_APPS
+)
 from core.scrcpy_manager import ScrcpyManager
+from core.clipboard_helper import copy_pil_image_to_clipboard
 
 class TestADBManager(unittest.TestCase):
     def setUp(self):
@@ -80,6 +89,57 @@ class TestDeviceOps(unittest.TestCase):
         self.assertEqual(res["longPressAction"], "KEYCODE_APP_SWITCH")
         self.assertEqual(res["shortPressAction"], "")
         self.assertFalse(res["shortPressEnabled"])
+
+    def test_side_button_mapping_and_presets(self):
+        # 1. Test preset catalog integrity
+        self.assertTrue(len(SIDE_BUTTON_PRESETS) >= 7)
+        self.assertTrue(len(SIDE_BUTTON_KEYCODES) >= 15)
+        self.assertIn("none", SIDE_BUTTON_LONG_ACTIONS)
+        self.assertIn("fullRefreshScreen", SIDE_BUTTON_LONG_ACTIONS)
+
+        # 2. Test query parsing with mock output
+        mock_kl = (
+            "key 115   VOLUME_UP\n"
+            "key 114   VOLUME_DOWN\n"
+            "key 104   VOLUME_UP\n"
+            "key 109   VOLUME_DOWN\n"
+        )
+        self.adb.run_shell.side_effect = [
+            (True, mock_kl, ""),
+            (True, "1", ""),
+            (True, "fullRefreshScreen", ""),
+            (True, "screenshot", "")
+        ]
+        res = self.ops.get_current_side_button_mapping()
+        self.assertEqual(res["top_key"], "VOLUME_UP")
+        self.assertEqual(res["bottom_key"], "VOLUME_DOWN")
+        self.assertTrue(res["long_press_enabled"])
+        self.assertEqual(res["top_long"], "fullRefreshScreen")
+        self.assertEqual(res["bottom_long"], "screenshot")
+        self.assertEqual(res["preset_id"], "VOLUME_KEYS")
+
+        # 3. Test apply side button mapping
+        self.adb.run_shell.side_effect = None
+        self.adb.run_shell.return_value = (True, "", "")
+        ok, msg = self.ops.apply_side_button_mapping(
+            top_key="PAGE_DOWN",
+            bottom_key="PAGE_UP",
+            top_long="none",
+            bottom_long="none"
+        )
+        self.assertTrue(ok)
+        self.assertIn("PAGE_DOWN", msg)
+        self.assertIn("PAGE_UP", msg)
+
+        # Verify deployment commands executed
+        calls = [str(c[0][0]) for c in self.adb.run_shell.call_args_list]
+        self.assertTrue(any("gpio-keys.kl" in c for c in calls))
+        self.assertTrue(any("onyx.action.refresh_keymapping" in c for c in calls))
+
+        # 4. Test reset side button mapping
+        ok_reset, msg_reset = self.ops.reset_side_button_mapping()
+        self.assertTrue(ok_reset)
+        self.assertIn("PAGE_UP / PAGE_DOWN", msg_reset)
 
     def test_debloat_catalog_integrity(self):
         self.assertTrue(len(DEBLOAT_CATALOG) >= 3)
@@ -156,6 +216,24 @@ class TestScrcpyManager(unittest.TestCase):
         # Scrcpy was verified installed on this machine
         self.assertTrue(self.scrcpy.is_available())
 
+    def test_cross_platform_scrcpy_locations(self):
+        # Test locate_scrcpy_executable returns a valid string on all platforms
+        exe = ScrcpyManager.locate_scrcpy_executable()
+        self.assertIsInstance(exe, str)
+        self.assertTrue(len(exe) > 0)
+
+        # Mocking darwin
+        with patch("sys.platform", "darwin"):
+            with patch("shutil.which", return_value=None):
+                with patch("os.path.isfile", side_effect=lambda p: p == "/opt/homebrew/bin/scrcpy"):
+                    self.assertEqual(ScrcpyManager.locate_scrcpy_executable(), "/opt/homebrew/bin/scrcpy")
+
+        # Mocking linux
+        with patch("sys.platform", "linux"):
+            with patch("shutil.which", return_value=None):
+                with patch("os.path.isfile", side_effect=lambda p: p == "/usr/bin/scrcpy"):
+                    self.assertEqual(ScrcpyManager.locate_scrcpy_executable(), "/usr/bin/scrcpy")
+
     def test_stop_when_not_running(self):
         # Should execute safely without exception
         self.scrcpy.stop()
@@ -219,6 +297,33 @@ class TestADBInstaller(unittest.TestCase):
                     self.assertTrue(is_packed(app.btn_sidebar_install_adb))
         finally:
             app.destroy()
+
+class TestCrossPlatformClipboard(unittest.TestCase):
+    def test_clipboard_copy(self):
+        img = Image.new("RGB", (100, 100), color="red")
+        # On current platform, verify function executes and returns a bool and message
+        ok, msg = copy_pil_image_to_clipboard(img)
+        self.assertIsInstance(ok, bool)
+        self.assertIsInstance(msg, str)
+        if sys.platform == "win32":
+            self.assertTrue(ok)
+
+        # Test simulated darwin
+        with patch("sys.platform", "darwin"):
+            with patch("subprocess.run") as mock_sub:
+                mock_sub.return_value = MagicMock(returncode=0)
+                ok_mac, msg_mac = copy_pil_image_to_clipboard(img)
+                self.assertTrue(ok_mac)
+                self.assertIn("macOS", msg_mac)
+
+        # Test simulated linux xclip
+        with patch("sys.platform", "linux"):
+            with patch("shutil.which", side_effect=lambda bin_name: "/usr/bin/xclip" if bin_name == "xclip" else None):
+                with patch("subprocess.run") as mock_sub:
+                    mock_sub.return_value = MagicMock(returncode=0)
+                    ok_lin, msg_lin = copy_pil_image_to_clipboard(img)
+                    self.assertTrue(ok_lin)
+                    self.assertIn("X11", msg_lin)
 
 if __name__ == "__main__":
     unittest.main()

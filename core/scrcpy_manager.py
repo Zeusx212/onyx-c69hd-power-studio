@@ -15,37 +15,65 @@ import collections
 class ScrcpyManager:
     @staticmethod
     def locate_scrcpy_executable():
-        """Find scrcpy binary on PATH, in Winget packages, or in standard install locations."""
+        """Find scrcpy binary on PATH, in package managers, or in standard OS install locations."""
+        import sys
+
         # 1. Check system PATH
         path_bin = shutil.which("scrcpy")
         if path_bin and os.path.isfile(path_bin):
             return path_bin
 
-        # 2. Check WinGet package directories
-        local_app = os.environ.get("LOCALAPPDATA", "")
-        if local_app:
-            winget_root = os.path.join(local_app, "Microsoft", "WinGet", "Packages")
-            if os.path.isdir(winget_root):
-                try:
-                    candidates = glob.glob(os.path.join(winget_root, "**", "scrcpy.exe"), recursive=True)
-                    if candidates:
-                        for c in candidates:
-                            if os.path.isfile(c):
-                                return c
-                except Exception:
-                    pass
+        # 2. Check Windows locations
+        if sys.platform == "win32":
+            local_app = os.environ.get("LOCALAPPDATA", "")
+            if local_app:
+                winget_root = os.path.join(local_app, "Microsoft", "WinGet", "Packages")
+                if os.path.isdir(winget_root):
+                    try:
+                        candidates = glob.glob(os.path.join(winget_root, "**", "scrcpy.exe"), recursive=True)
+                        if candidates:
+                            for c in candidates:
+                                if os.path.isfile(c):
+                                    return c
+                    except Exception:
+                        pass
 
-        # 3. Common fallback locations
-        fallback_paths = [
-            r"C:\scrcpy\scrcpy.exe",
-            r"C:\tools\scrcpy\scrcpy.exe",
-            os.path.expanduser(r"~\scrcpy\scrcpy.exe"),
-            os.path.expanduser(r"~\AppData\Local\Programs\scrcpy\scrcpy.exe"),
-            r"C:\ProgramData\chocolatey\bin\scrcpy.exe",
-        ]
-        for p in fallback_paths:
-            if os.path.isfile(p):
-                return p
+            win_fallbacks = [
+                r"C:\scrcpy\scrcpy.exe",
+                r"C:\tools\scrcpy\scrcpy.exe",
+                os.path.expanduser(r"~\scrcpy\scrcpy.exe"),
+                os.path.expanduser(r"~\AppData\Local\Programs\scrcpy\scrcpy.exe"),
+                r"C:\ProgramData\chocolatey\bin\scrcpy.exe",
+            ]
+            for p in win_fallbacks:
+                if os.path.isfile(p):
+                    return p
+
+        # 3. Check macOS locations (Homebrew Apple Silicon / Intel, MacPorts)
+        elif sys.platform == "darwin":
+            mac_fallbacks = [
+                "/opt/homebrew/bin/scrcpy",
+                "/usr/local/bin/scrcpy",
+                "/opt/local/bin/scrcpy",
+                os.path.expanduser("~/homebrew/bin/scrcpy"),
+                os.path.expanduser("~/.local/bin/scrcpy"),
+            ]
+            for p in mac_fallbacks:
+                if os.path.isfile(p):
+                    return p
+
+        # 4. Check Linux locations (Debian/Ubuntu, Arch, Fedora, Snap)
+        else:
+            linux_fallbacks = [
+                "/usr/bin/scrcpy",
+                "/usr/local/bin/scrcpy",
+                "/snap/bin/scrcpy",
+                os.path.expanduser("~/.local/bin/scrcpy"),
+                "/var/lib/flatpak/exports/bin/com.github.rom1v.scrcpy",
+            ]
+            for p in linux_fallbacks:
+                if os.path.isfile(p):
+                    return p
 
         return "scrcpy"
 

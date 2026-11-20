@@ -5,3 +5,7 @@ backups/
 build/
 dist/
 *.spec
+*.bin
+*.img
+.venv/
+tools/
