@@ -10,7 +10,7 @@ A modern desktop application designed specifically for customizing, debloating, 
 - **Hardware Button Remapping**: Rebind front center button long-press (Recent Apps / App Switcher, Full Refresh, Dialog) and short-press with instant broadcast updates.
 - **1-Click Wireless ADB**: Auto-detects device Wi-Fi IP and switches between USB and cable-free mode seamlessly.
 - **Book & Comic Transfer Hub**: Multi-file transfer (`.epub`, `.pdf`, `.cbz`, `.mobi`) with immediate Android MediaScanner broadcast indexing.
-- **Curated E-Ink App Sideloading**: 1-click install for KOReader, Mihon, Simple Keyboard, Key Mapper, F-Droid, LocalSend, and Taskbar.
+- **Curated E-Ink App Sideloading**: 1-click install for KOReader, Mihon, EinkBro, Komi Store, Olauncher, Librera Reader, Simple Keyboard, Key Mapper, LocalSend, and F-Droid.
 - **Reversible Debloater**: Searchable debloat manager to disable battery-draining Qualcomm voice activation daemons, cellular services, and Google background services.
 - **Device Settings & Power Tweaks**: Resolves the factory infinite screen timeout bug (sets to 5 min), tweaks font scale, DPI density, and background telemetry.
 - **Root & Partition Tools**: Safe raw block backups for `boot`, `dtbo`, `recovery`, `vbmeta`, and Magisk installation support.

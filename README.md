@@ -57,11 +57,14 @@ The **C69HD** (`C69_M_STAR`) has unique hardware characteristics:
 - **Curated 1-Click E-Ink Catalog**: Automatic download and install of official releases:
   - **KOReader**: The premier open-source E-Ink e-reader engine.
   - **Mihon**: High-contrast manga and comic reader.
+  - **EinkBro**: Purpose-built E-Ink browser with physical page-turn button navigation and contrast controls.
+  - **Komi Store**: Modern GitHub/Codeberg app store with direct APK downloads, auto-updates, and silent installs.
+  - **Olauncher**: Distraction-free, minimal high-contrast text launcher ideal for Carta displays.
+  - **Librera Reader**: Highly customizable multi-format reader with dedicated E-Ink high-contrast mode.
   - **Simple Keyboard**: Lightweight keyboard (replaces heavy 70 MB Onyx LatinIME).
   - **Key Mapper**: Enables double-press and multi-trigger remapping.
   - **LocalSend**: Offline Wi-Fi file sharing.
   - **F-Droid**: Open-source app store.
-  - **Taskbar**: Floating app drawer and multitasking switcher.
 
 ### 7. ⚡ E-Ink Remote & Screenshot Snip
 - **Live Screenshot Tool**: Captures clean 758 × 1024 screenshots over ADB, with live thumbnail display, "Save as PNG", and "Copy to Windows Clipboard".

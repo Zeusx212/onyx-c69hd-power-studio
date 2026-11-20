@@ -83,34 +83,52 @@ CURATED_EINK_APPS = [
         "url": "https://github.com/mihonapp/mihon/releases/download/v0.17.1/mihon-arm64-v8a-v0.17.1.apk"
     },
     {
+        "name": "EinkBro",
+        "desc": "Web browser engineered specifically for E-Ink with physical page turn keys & contrast tuning",
+        "package": "info.plateaukao.einkbro",
+        "url": "https://github.com/plateaukao/einkbro/releases/download/v16.7.1/app-universal-release.apk"
+    },
+    {
+        "name": "Komi Store",
+        "desc": "Open-source GitHub/Codeberg app store with direct APK downloads & update manager",
+        "package": "zed.rainxch.githubstore",
+        "url": "https://github.com/komi-store/komi-store/releases/download/v1.9.4/Komi-Store-1.9.4.apk"
+    },
+    {
         "name": "Simple Keyboard",
         "desc": "Ultra-lightweight keyboard (replaces heavy 70MB Onyx LatinIME)",
         "package": "rkr.simplekeyboard.inputmethod",
-        "url": "https://github.com/rkkr/simple-keyboard/releases/download/v5.9/simple-keyboard-v5.9.apk"
+        "url": "https://github.com/rkkr/simple-keyboard/releases/download/149/app-release.apk"
     },
     {
         "name": "Key Mapper",
         "desc": "Enables double-press, hold, and multi-key triggers on hardware keys",
         "package": "io.github.sds100.keymapper",
-        "url": "https://github.com/keymapperorg/KeyMapper/releases/download/v2.5.2/key-mapper-v2.5.2.apk"
+        "url": "https://github.com/keymapperorg/KeyMapper/releases/download/v4.7.1/keymapper-4.7.1-foss.apk"
+    },
+    {
+        "name": "Olauncher",
+        "desc": "Distraction-free, minimal text launcher perfectly suited for E-Ink screens",
+        "package": "app.tanuj.launcher",
+        "url": "https://github.com/tanujnotes/Olauncher/releases/download/v6.9.17/Olauncher-v6.9.17.apk"
+    },
+    {
+        "name": "Librera Reader",
+        "desc": "Customizable multi-format book and PDF reader with dedicated E-Ink mode",
+        "package": "com.foobnix.pdf.reader",
+        "url": "https://github.com/foobnix/LibreraReader/releases/download/10.1.7/Librera.Fdroid-10.1.7-mupdf-uni.apk"
     },
     {
         "name": "LocalSend",
         "desc": "Offline file, book, and APK sharing over local Wi-Fi",
         "package": "org.localsend.localsend_app",
-        "url": "https://github.com/localsend/localsend/releases/download/v1.16.1/LocalSend-1.16.1-android-arm64.apk"
+        "url": "https://github.com/localsend/localsend/releases/download/v1.18.2/LocalSend-1.18.2-android-arm64v8.apk"
     },
     {
         "name": "F-Droid",
-        "desc": "Open-source Android application store",
+        "desc": "The classic FOSS Android application repository and package manager",
         "package": "org.fdroid.fdroid",
         "url": "https://f-droid.org/F-Droid.apk"
-    },
-    {
-        "name": "Taskbar",
-        "desc": "Floating app drawer and desktop multitasking switcher",
-        "package": "com.farmerbb.taskbar",
-        "url": "https://github.com/farmerbb/Taskbar/releases/download/207/Taskbar-6.2.2.apk"
     }
 ]
 

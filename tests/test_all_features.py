@@ -91,7 +91,13 @@ class TestDeviceOps(unittest.TestCase):
                 self.assertTrue(len(desc) > 0)
 
     def test_curated_apps_catalog(self):
-        self.assertTrue(len(CURATED_EINK_APPS) >= 5)
+        self.assertTrue(len(CURATED_EINK_APPS) >= 8)
+        names = [app["name"] for app in CURATED_EINK_APPS]
+        self.assertNotIn("Taskbar", names)
+        self.assertIn("Komi Store", names)
+        self.assertIn("EinkBro", names)
+        self.assertIn("Olauncher", names)
+        self.assertIn("Librera Reader", names)
         for app in CURATED_EINK_APPS:
             self.assertIn("name", app)
             self.assertIn("url", app)
