@@ -23,17 +23,28 @@ The **C69HD** (`C69_M_STAR`) has unique hardware characteristics:
 - **📖 Distraction-Free Reading**: Relaxed 10-minute timeout, optimized 1.05 font scale, quiet background environment.
 - **🔄 Factory Default Revert**: Restores all stock packages, button mappings, and default settings.
 
-### 2. 📶 1-Click Wireless ADB (Cable-Free Mode)
+### 2. 📱 Scrcpy Screen Mirroring (Embedded & Standalone)
+- **Native Embedded Viewport**: Embeds live scrcpy rendering directly into the studio app window using Windows Win32 API (`SetParent`, `SetWindowPos`) with Direct3D11 hardware acceleration.
+- **Standalone Mirror Mode**: Launch scrcpy in an independent window if preferred.
+- **E-Ink Specific Presets**:
+  - FPS limiter (15 FPS recommended for E-Ink stability and lower CPU/battery drain).
+  - Turn device screen off while mirroring (`--turn-screen-off`).
+  - Stay awake while connected (`--stay-awake`).
+  - Read-only viewer mode (`--no-control`).
+  - MP4 session recording (`--record=<filename>`).
+- **Integrated Virtual Navigation Bar**: Hardware Back, Home, Recent Apps, Volume, E-Ink refresh, and Sleep buttons right below the viewport.
+
+### 3. 📶 1-Click Wireless ADB (Cable-Free Mode)
 - Automatically detects the device's local Wi-Fi IP (e.g. `192.168.1.11`).
 - Switches ADB to port 5555 and connects wirelessly with a single click in the sidebar.
 - Disconnect and switch back to USB cable at any time.
 
-### 3. 📚 Book & Comic Transfer Hub
+### 4. 📚 Book & Comic Transfer Hub
 - Drag & drop or browse `.epub`, `.pdf`, `.mobi`, `.azw3`, `.cbz`, `.cbr`, and `.txt` files.
 - Select target destination (`/sdcard/Books/`, `/sdcard/Books/Manga/`, etc.).
 - Automatically sends Android `MEDIA_SCANNER_SCAN_FILE` broadcasts so new books appear on your Onyx Bookshelf immediately without needing a reboot or reconnect.
 
-### 4. 📦 E-Ink App Sideload Hub
+### 5. 📦 E-Ink App Sideload Hub
 - **Local APK Sideload**: Install any `.apk` with replacement permissions.
 - **Curated 1-Click E-Ink Catalog**: Automatic download and install of official releases:
   - **KOReader**: The premier open-source E-Ink e-reader engine.
@@ -44,12 +55,12 @@ The **C69HD** (`C69_M_STAR`) has unique hardware characteristics:
   - **F-Droid**: Open-source app store.
   - **Taskbar**: Floating app drawer and multitasking switcher.
 
-### 5. ⚡ E-Ink Remote & Screenshot Snip
+### 6. ⚡ E-Ink Remote & Screenshot Snip
 - **Live Screenshot Tool**: Captures clean 758 × 1024 screenshots over ADB, with live thumbnail display, "Save as PNG", and "Copy to Windows Clipboard".
 - **E-Ink Refresh Controls**: Remote full-screen e-ink refresh (`onyx.action.refresh_screen`) to clear ghosting, plus A2 speed mode toggle.
 - **Virtual Navigation Keys**: Back, Home, Recent Apps, Volume Up/Down, and Lock/Sleep.
 
-### 6. 🎨 Screensavers & Boot Animation
+### 7. 🎨 Screensavers & Boot Animation
 - **Screensaver Studio**: Auto-crops and scales any image to native Carta 758 × 1024 resolution with E-Ink high-contrast grayscale.
   - Target choices: User Gallery (`/sdcard/Pictures/Screensaver/`), System Standby (`standby-1.png`), or Shutdown Screen (`shutdown-default.png`).
   - Action buttons: "Open Wallpaper Settings on Device" and "Test Sleep Screen".
@@ -58,28 +69,45 @@ The **C69HD** (`C69_M_STAR`) has unique hardware characteristics:
   - **Live Preview on Device**: Plays the boot animation live on the physical e-reader screen without needing a reboot!
   - 1-Click Restore stock Onyx animation.
 
-### 7. 🛡️ Root & Partitions
+### 8. 🛡️ Root & Partitions
 - **Stock Partition Backup**: Single or full dump of `boot`, `dtbo`, `recovery`, `vbmeta`, `vbmeta_system`, and `persist`.
 - **Magisk Root Workflow**: Install Magisk APK -> Reboot Fastboot -> Flash Patched Boot -> Restore Stock.
 - **Hardware Button Wake**: Install `c69hd-wake.zip` Magisk module to allow physical center and side keys to wake the device from sleep.
 
-### 8. 🔘 Hardware Button Remapper
+### 9. 🔘 Hardware Button Remapper
 - Remap front button (`KEYCODE_BACK`):
   - **Long-Press**: Recent Apps / App Switcher (Recommended), Full Refresh, Screenshot, Refresh Mode Dialog, Home, Toggle A2, Factory Default.
   - **Short-Press**: Standard Back Key, Recent Apps, Full Refresh, Screenshot, Home.
 - Automatically writes to `settings put global KEYCODE_BACK`, configures `key_custom_side_key_short_press_enable`, and broadcasts `onyx.action.refresh_keymapping`.
 
-### 9. 🧹 Reversible System Debloater
+### 10. 🧹 Reversible System Debloater
 - Real-time search filter.
 - Safe 1-Click Debloat: Disables Snapdragon Voice Activation, dual-SIM daemons, SIM GBA, IWLAN, XR service, and cell broadcast alerts.
 - High RAM Consumers: Google Play Services & GSF toggle.
 - 100% reversible via `pm disable-user --user 0`.
 
-### 10. ⚙️ Device Settings & Power Tweaks
+### 11. ⚙️ Device Settings & Power Tweaks
 - Screen timeout bug fix with 1-click **"Fix to 5 Minutes"**.
 - Telemetry, Bluetooth LE, and Wi-Fi scanning toggles.
 - Location mode toggle.
 - Font scale, display density (212 DPI reset / custom), and high text contrast.
+
+---
+
+## 🧪 Unit Testing
+
+Run the automated test suite across all modules:
+```bash
+python -m unittest discover -s tests -p "test_*.py"
+```
+Covers:
+- ADB manager parsing and device info probes
+- Partition dump definitions and safety validations
+- Screensaver 758x1024 high-contrast grayscale conversion
+- Boot animation `desc.txt` and uncompressed ZIP format checks
+- Button remapping JSON payloads and broadcast commands
+- Scrcpy flag assembly and path verification
+- Curated app store catalogue and debloat package definitions
 
 ---
 

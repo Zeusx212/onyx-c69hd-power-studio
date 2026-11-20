@@ -1,8 +1,8 @@
 """
 Comprehensive modern CustomTkinter GUI for Onyx Boox C69HD Customizer.
-Includes Root/Partitions, Button Remap, Screensaver Studio, Book Library Sync,
-E-Ink App Sideload Hub, Remote E-Ink Controls & Screenshot, 1-Click Presets,
-Debloater, System Settings, and Wireless ADB.
+Includes Native Embedded Scrcpy Screen Mirroring, Root/Partitions, Button Remap,
+Screensaver Studio, Book Library Sync, E-Ink App Sideload Hub, Remote E-Ink Controls & Screenshot,
+1-Click Presets, Debloater, System Settings, and Wireless ADB.
 """
 
 import os
@@ -19,20 +19,23 @@ from core.device_ops import (
     CURATED_EINK_APPS,
     HAS_PILLOW
 )
+from core.clipboard_helper import copy_pil_image_to_clipboard
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
 class MainWindow(ctk.CTk):
-    def __init__(self, adb_manager, device_ops):
+    def __init__(self, adb_manager, device_ops, scrcpy_manager):
         super().__init__()
         self.adb = adb_manager
         self.ops = device_ops
+        self.scrcpy = scrcpy_manager
         self.adb.log_callback = self.append_log
+        self.scrcpy.log_callback = self.append_log
 
         self.title("Onyx Boox C69HD Suite • Faust 5 OEM Power Studio")
-        self.geometry("1140x820")
-        self.minsize(1020, 720)
+        self.geometry("1180x840")
+        self.minsize(1040, 720)
 
         # State variables
         self._selected_image_path = None
@@ -41,6 +44,7 @@ class MainWindow(ctk.CTk):
         self._ctk_preview_image = None
         self._ctk_screenshot_image = None
         self._last_pil_screenshot = None
+        self._record_video_path = None
 
         # Colors
         self.COLOR_SIDEBAR = "#0F1219"
@@ -56,17 +60,25 @@ class MainWindow(ctk.CTk):
 
         self.configure(fg_color=self.COLOR_MAIN_BG)
 
+        # Window close handler to terminate background scrcpy cleanly
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
+
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(1, weight=1)
 
         self._build_sidebar()
         self._build_content_area()
 
-        # Start on Presets or Root
+        # Start on Presets
         self._show_page("presets")
 
         # Initial device probe
         self.refresh_device_status_async()
+
+    def _on_close(self):
+        if self.scrcpy.is_running():
+            self.scrcpy.stop()
+        self.destroy()
 
     # =========================================================================
     # SIDEBAR NAVIGATION & WIRELESS ADB
@@ -75,7 +87,7 @@ class MainWindow(ctk.CTk):
         self.sidebar_frame = ctk.CTkFrame(self, width=260, corner_radius=0, fg_color=self.COLOR_SIDEBAR)
         self.sidebar_frame.grid(row=0, column=0, sticky="nsew")
 
-        # Header Title
+        # Brand Box
         brand_box = ctk.CTkFrame(self.sidebar_frame, fg_color="transparent")
         brand_box.pack(fill="x", padx=18, pady=(20, 14))
 
@@ -88,18 +100,19 @@ class MainWindow(ctk.CTk):
 
         ctk.CTkLabel(
             brand_box,
-            text="Faust 5 OEM Studio • v3.0",
+            text="Faust 5 OEM Studio • v3.1",
             font=ctk.CTkFont(family="Segoe UI", size=11),
             text_color=self.COLOR_CYAN
         ).pack(anchor="w")
 
-        # Scrollable Nav Buttons
+        # Navigation Scroll Area
         nav_scroll = ctk.CTkScrollableFrame(self.sidebar_frame, fg_color="transparent")
         nav_scroll.pack(fill="both", expand=True, padx=8, pady=4)
 
         self.nav_buttons = {}
         pages = [
             ("presets", "🏆  1-Click Presets"),
+            ("mirror", "📱  Screen Mirror (Scrcpy)"),
             ("root", "🛡️  Root & Partitions"),
             ("button", "🔘  Button Remapper"),
             ("media", "🎨  Screensaver & Boot"),
@@ -127,7 +140,7 @@ class MainWindow(ctk.CTk):
             btn.pack(fill="x", pady=2)
             self.nav_buttons[page_id] = btn
 
-        # Device & Wireless ADB Bottom Box
+        # Bottom Device Status & Wireless ADB Card
         status_box = ctk.CTkFrame(self.sidebar_frame, corner_radius=10, fg_color=self.COLOR_CARD, border_width=1, border_color=self.COLOR_CARD_BORDER)
         status_box.pack(side="bottom", fill="x", padx=12, pady=14)
 
@@ -159,7 +172,6 @@ class MainWindow(ctk.CTk):
         )
         self.lbl_status_badge.pack(anchor="w", padx=12, pady=(0, 8))
 
-        # Wireless ADB Button
         self.btn_wireless = ctk.CTkButton(
             status_box,
             text="📶 Connect via Wi-Fi",
@@ -195,6 +207,7 @@ class MainWindow(ctk.CTk):
 
         self.pages = {}
         self.pages["presets"] = self._create_page_presets()
+        self.pages["mirror"] = self._create_page_mirror()
         self.pages["root"] = self._create_page_root()
         self.pages["button"] = self._create_page_button()
         self.pages["media"] = self._create_page_media()
@@ -217,6 +230,238 @@ class MainWindow(ctk.CTk):
                 btn.configure(fg_color="#1A202C", text_color=self.COLOR_CYAN, font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"))
             else:
                 btn.configure(fg_color="transparent", text_color=self.COLOR_TEXT_MUTED, font=ctk.CTkFont(family="Segoe UI", size=12, weight="normal"))
+
+    # =========================================================================
+    # PAGE: LIVE SCREEN MIRROR (SCRCPY INTEGRATION)
+    # =========================================================================
+    def _create_page_mirror(self):
+        page = ctk.CTkFrame(self.content_container, fg_color="transparent")
+        page.grid_rowconfigure(2, weight=1)
+        page.grid_columnconfigure(0, weight=1)
+
+        # Header Title
+        lbl_h = ctk.CTkLabel(page, text="Live Screen Mirror (Scrcpy)", font=ctk.CTkFont(family="Segoe UI", size=22, weight="bold"), text_color="#FFFFFF")
+        lbl_h.grid(row=0, column=0, sticky="w", pady=(0, 4))
+        lbl_sub = ctk.CTkLabel(page, text="Hardware-accelerated Direct3D11 mirroring with embedded in-app display and E-Ink battery optimization.", font=ctk.CTkFont(family="Segoe UI", size=12), text_color=self.COLOR_TEXT_MUTED)
+        lbl_sub.grid(row=1, column=0, sticky="w", pady=(0, 12))
+
+        # Main Split: Left Controls + Right Embedded Viewer
+        split = ctk.CTkFrame(page, fg_color="transparent")
+        split.grid(row=2, column=0, sticky="nsew")
+        split.grid_rowconfigure(0, weight=1)
+        split.grid_columnconfigure(1, weight=1)
+
+        # Left Column: Scrcpy Controls Card
+        ctrl_card = ctk.CTkScrollableFrame(split, corner_radius=12, fg_color=self.COLOR_CARD, border_width=1, border_color=self.COLOR_CARD_BORDER, width=340)
+        ctrl_card.grid(row=0, column=0, sticky="nsew", padx=(0, 14))
+
+        ctk.CTkLabel(ctrl_card, text="Mirroring Session Controls", font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"), text_color=self.COLOR_CYAN).pack(anchor="w", padx=12, pady=(10, 4))
+
+        # Status Badge
+        self.lbl_mirror_status = ctk.CTkLabel(
+            ctrl_card,
+            text="STATUS: IDLE",
+            corner_radius=6,
+            fg_color="#1E293B",
+            text_color=self.COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"),
+            padx=8,
+            pady=4
+        )
+        self.lbl_mirror_status.pack(anchor="w", padx=12, pady=(0, 12))
+
+        # Start / Stop Buttons
+        btn_box = ctk.CTkFrame(ctrl_card, fg_color="transparent")
+        btn_box.pack(fill="x", padx=12, pady=(0, 14))
+
+        self.btn_start_mirror = ctk.CTkButton(
+            btn_box,
+            text="▶ Start Mirror",
+            height=36,
+            corner_radius=8,
+            fg_color=self.COLOR_GREEN,
+            hover_color="#059669",
+            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+            command=self._action_start_scrcpy
+        )
+        self.btn_start_mirror.pack(side="left", fill="x", expand=True, padx=(0, 6))
+
+        self.btn_stop_mirror = ctk.CTkButton(
+            btn_box,
+            text="⏹ Stop",
+            height=36,
+            corner_radius=8,
+            fg_color=self.COLOR_RED,
+            hover_color="#DC2626",
+            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+            command=self._action_stop_scrcpy,
+            state="disabled"
+        )
+        self.btn_stop_mirror.pack(side="right", fill="x", expand=True)
+
+        # Mode Selection
+        ctk.CTkLabel(ctrl_card, text="Display Mode:", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold")).pack(anchor="w", padx=12, pady=(4, 2))
+        self.var_mirror_mode = ctk.StringVar(value="embedded")
+        mode_box = ctk.CTkFrame(ctrl_card, fg_color="transparent")
+        mode_box.pack(anchor="w", padx=12, pady=(0, 10))
+        ctk.CTkRadioButton(mode_box, text="Embedded In-App", variable=self.var_mirror_mode, value="embedded").pack(side="left", padx=(0, 10))
+        ctk.CTkRadioButton(mode_box, text="Pop-out Window", variable=self.var_mirror_mode, value="window").pack(side="left")
+
+        # Quality Preset
+        ctk.CTkLabel(ctrl_card, text="Quality / Performance Profile:", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold")).pack(anchor="w", padx=12, pady=(4, 2))
+        self.opt_mirror_profile = ctk.CTkOptionMenu(
+            ctrl_card,
+            height=32,
+            corner_radius=8,
+            values=[
+                "E-Ink Optimal (758px, 15 FPS, 2M)",
+                "Crisp Reading (1024px, 20 FPS, 4M)",
+                "Full Speed (Native, 60 FPS, 8M)"
+            ],
+            width=290
+        )
+        self.opt_mirror_profile.set("E-Ink Optimal (758px, 15 FPS, 2M)")
+        self.opt_mirror_profile.pack(anchor="w", padx=12, pady=(0, 12))
+
+        # E-Ink Power Toggles
+        ctk.CTkLabel(ctrl_card, text="E-Ink Optimizations:", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold")).pack(anchor="w", padx=12, pady=(6, 4))
+
+        self.sw_turn_screen_off = ctk.CTkSwitch(
+            ctrl_card,
+            text="Turn Device Screen OFF while mirroring\n(Saves e-ink battery, control from PC)",
+            font=ctk.CTkFont(family="Segoe UI", size=11)
+        )
+        self.sw_turn_screen_off.pack(anchor="w", padx=12, pady=4)
+
+        self.sw_stay_awake = ctk.CTkSwitch(ctrl_card, text="Keep Device Awake (--stay-awake)", font=ctk.CTkFont(family="Segoe UI", size=11))
+        self.sw_stay_awake.select()
+        self.sw_stay_awake.pack(anchor="w", padx=12, pady=4)
+
+        self.sw_mirror_ontop = ctk.CTkSwitch(ctrl_card, text="Always on Top (Pop-out mode)", font=ctk.CTkFont(family="Segoe UI", size=11))
+        self.sw_mirror_ontop.pack(anchor="w", padx=12, pady=4)
+
+        self.sw_mirror_readonly = ctk.CTkSwitch(ctrl_card, text="Read-Only Mode (No mouse/clicks)", font=ctk.CTkFont(family="Segoe UI", size=11))
+        self.sw_mirror_readonly.pack(anchor="w", padx=12, pady=4)
+
+        # Record to MP4 row
+        rec_box = ctk.CTkFrame(ctrl_card, fg_color="transparent")
+        rec_box.pack(fill="x", padx=12, pady=(12, 6))
+        self.sw_record = ctk.CTkSwitch(rec_box, text="Record to MP4:", font=ctk.CTkFont(family="Segoe UI", size=11))
+        self.sw_record.pack(side="left")
+        ctk.CTkButton(rec_box, text="Choose Path...", width=95, height=26, corner_radius=6, fg_color="#283042", command=self._action_choose_record_path).pack(side="right")
+
+        self.lbl_record_path = ctk.CTkLabel(ctrl_card, text="No recording path set", font=ctk.CTkFont(family="Segoe UI", size=10), text_color=self.COLOR_TEXT_MUTED)
+        self.lbl_record_path.pack(anchor="w", padx=12, pady=(0, 10))
+
+        # Quick Virtual Hardware Remote
+        ctk.CTkLabel(ctrl_card, text="Remote E-Ink Key Controls", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"), text_color=self.COLOR_CYAN).pack(anchor="w", padx=12, pady=(14, 6))
+
+        m_nav = ctk.CTkFrame(ctrl_card, fg_color="transparent")
+        m_nav.pack(fill="x", padx=8, pady=2)
+        ctk.CTkButton(m_nav, text="◀ Back", height=30, corner_radius=6, fg_color="#283042", command=lambda: self.ops.send_keyevent("KEYCODE_BACK")).grid(row=0, column=0, padx=2, pady=2, sticky="ew")
+        ctk.CTkButton(m_nav, text="⌂ Home", height=30, corner_radius=6, fg_color="#283042", command=lambda: self.ops.send_keyevent("KEYCODE_HOME")).grid(row=0, column=1, padx=2, pady=2, sticky="ew")
+        ctk.CTkButton(m_nav, text="☰ Overview", height=30, corner_radius=6, fg_color="#283042", command=lambda: self.ops.send_keyevent("KEYCODE_APP_SWITCH")).grid(row=0, column=2, padx=2, pady=2, sticky="ew")
+        m_nav.grid_columnconfigure(0, weight=1)
+        m_nav.grid_columnconfigure(1, weight=1)
+        m_nav.grid_columnconfigure(2, weight=1)
+
+        ctk.CTkButton(ctrl_card, text="🔄 Clear Ghosting (Full Refresh)", height=32, corner_radius=6, fg_color="#1E293B", command=self.ops.trigger_eink_refresh).pack(fill="x", padx=10, pady=(6, 12))
+
+        # Right Column: Embedded Scrcpy Window Container
+        viewer_card = ctk.CTkFrame(split, corner_radius=12, fg_color="#0A0C12", border_width=1, border_color=self.COLOR_CARD_BORDER)
+        viewer_card.grid(row=0, column=1, sticky="nsew")
+        viewer_card.grid_rowconfigure(1, weight=1)
+        viewer_card.grid_columnconfigure(0, weight=1)
+
+        v_head = ctk.CTkFrame(viewer_card, fg_color="transparent")
+        v_head.grid(row=0, column=0, sticky="ew", padx=16, pady=(10, 4))
+        ctk.CTkLabel(v_head, text="Display Viewport (758 × 1024 Carta E-Ink)", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"), text_color=self.COLOR_CYAN).pack(side="left")
+
+        # Native container for scrcpy SetParent
+        self.scrcpy_container = tk.Frame(viewer_card, bg="#05070C", highlightthickness=0)
+        self.scrcpy_container.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 12))
+
+        # Placeholder label when scrcpy is not running
+        self.lbl_container_placeholder = ctk.CTkLabel(
+            self.scrcpy_container,
+            text="Mirror Idle\n\nClick '▶ Start Mirror' to launch live screen streaming.\nSupports mouse clicks, touch swipes, keyboard typing, and drag-and-drop APK installs.",
+            font=ctk.CTkFont(family="Segoe UI", size=13),
+            text_color=self.COLOR_TEXT_MUTED
+        )
+        self.lbl_container_placeholder.place(relx=0.5, rely=0.5, anchor="center")
+
+        return page
+
+    # =========================================================================
+    # ACTIONS: SCRCPY MIRRORING
+    # =========================================================================
+    def _action_choose_record_path(self):
+        f = filedialog.asksaveasfilename(defaultextension=".mp4", filetypes=[("MP4 Video", "*.mp4")])
+        if f:
+            self._record_video_path = f
+            self.lbl_record_path.configure(text=os.path.basename(f))
+            self.sw_record.select()
+
+    def _action_start_scrcpy(self):
+        if self.scrcpy.is_running():
+            return
+
+        is_embedded = (self.var_mirror_mode.get() == "embedded")
+        profile = self.opt_mirror_profile.get()
+
+        max_size = "758"
+        max_fps = "15"
+        bit_rate = "2M"
+
+        if "1024px" in profile:
+            max_size = "1024"
+            max_fps = "20"
+            bit_rate = "4M"
+        elif "Full Speed" in profile:
+            max_size = "native"
+            max_fps = "60"
+            bit_rate = "8M"
+
+        options = {
+            "max_size": max_size,
+            "max_fps": max_fps,
+            "bit_rate": bit_rate,
+            "turn_screen_off": bool(self.sw_turn_screen_off.get()),
+            "stay_awake": bool(self.sw_stay_awake.get()),
+            "always_on_top": bool(self.sw_mirror_ontop.get()),
+            "read_only": bool(self.sw_mirror_readonly.get()),
+            "record_file": self._record_video_path if self.sw_record.get() else None,
+            "embedded": is_embedded
+        }
+
+        container_hwnd = self.scrcpy_container.winfo_id() if is_embedded else None
+
+        self.lbl_mirror_status.configure(text="STATUS: STARTING...", fg_color=self.COLOR_AMBER, text_color="#FFFFFF")
+        self.btn_start_mirror.configure(state="disabled")
+
+        def _on_stop_cb():
+            self.after(0, self._handle_scrcpy_stopped)
+
+        ok, msg = self.scrcpy.start(container_hwnd=container_hwnd, options=options, on_stop=_on_stop_cb)
+        if ok:
+            self.lbl_mirror_status.configure(text=f"STATUS: RUNNING ({max_size}px / {max_fps} FPS)", fg_color="#064E3B", text_color="#FFFFFF")
+            self.btn_stop_mirror.configure(state="normal")
+            if is_embedded:
+                self.lbl_container_placeholder.place_forget()
+        else:
+            self.lbl_mirror_status.configure(text="STATUS: ERROR", fg_color=self.COLOR_RED, text_color="#FFFFFF")
+            self.btn_start_mirror.configure(state="normal")
+            messagebox.showerror("Scrcpy Error", f"Failed to start mirror:\n{msg}")
+
+    def _action_stop_scrcpy(self):
+        self.scrcpy.stop()
+        self._handle_scrcpy_stopped()
+
+    def _handle_scrcpy_stopped(self):
+        self.lbl_mirror_status.configure(text="STATUS: IDLE", fg_color="#1E293B", text_color=self.COLOR_TEXT_MUTED)
+        self.btn_start_mirror.configure(state="normal")
+        self.btn_stop_mirror.configure(state="disabled")
+        self.lbl_container_placeholder.place(relx=0.5, rely=0.5, anchor="center")
 
     # =========================================================================
     # PAGE: 1-CLICK PROFILES (PRESETS)
@@ -294,7 +539,6 @@ class MainWindow(ctk.CTk):
         lbl_sub = ctk.CTkLabel(page, text="Send books, comics, and PDFs directly to your Onyx bookshelf with automatic library indexing.", font=ctk.CTkFont(family="Segoe UI", size=12), text_color=self.COLOR_TEXT_MUTED)
         lbl_sub.pack(anchor="w", pady=(0, 16))
 
-        # Transfer Card
         card = ctk.CTkFrame(page, corner_radius=12, fg_color=self.COLOR_CARD, border_width=1, border_color=self.COLOR_CARD_BORDER)
         card.pack(fill="x", pady=8)
 
@@ -318,7 +562,6 @@ class MainWindow(ctk.CTk):
         self.lbl_books_count = ctk.CTkLabel(btn_row, text="No files selected", text_color=self.COLOR_TEXT_MUTED)
         self.lbl_books_count.pack(side="left")
 
-        # Destination Folder
         dest_row = ctk.CTkFrame(inner, fg_color="transparent")
         dest_row.pack(anchor="w", pady=10)
 
@@ -332,7 +575,6 @@ class MainWindow(ctk.CTk):
         )
         self.opt_book_dest.pack(side="left")
 
-        # Transfer Action Button
         ctk.CTkButton(
             inner,
             text="🚀  Transfer Books to Device & Sync Library",
@@ -344,7 +586,6 @@ class MainWindow(ctk.CTk):
             command=self._action_push_books
         ).pack(anchor="w", pady=(12, 4))
 
-        # Selected Books Listbox
         self.txt_books_list = ctk.CTkTextbox(inner, height=130, corner_radius=8, fg_color="#0A0D14", text_color="#E2E8F0", font=ctk.CTkFont(family="Consolas", size=11))
         self.txt_books_list.pack(fill="x", pady=(10, 0))
 
@@ -361,7 +602,6 @@ class MainWindow(ctk.CTk):
         lbl_sub = ctk.CTkLabel(page, text="Install local APKs or 1-click download curated essentials designed for Carta E-Ink.", font=ctk.CTkFont(family="Segoe UI", size=12), text_color=self.COLOR_TEXT_MUTED)
         lbl_sub.pack(anchor="w", pady=(0, 16))
 
-        # Card 1: Local APK Sideload
         c_local = ctk.CTkFrame(page, corner_radius=12, fg_color=self.COLOR_CARD, border_width=1, border_color=self.COLOR_CARD_BORDER)
         c_local.pack(fill="x", pady=8)
 
@@ -373,7 +613,6 @@ class MainWindow(ctk.CTk):
 
         ctk.CTkButton(l_inner, text="📦 Choose & Sideload APK...", height=36, corner_radius=8, fg_color=self.COLOR_BLUE, hover_color="#2563EB", command=self._action_sideload_local_apk).pack(anchor="w")
 
-        # Card 2: Curated Catalog
         c_cat = ctk.CTkFrame(page, corner_radius=12, fg_color=self.COLOR_CARD, border_width=1, border_color=self.COLOR_CARD_BORDER)
         c_cat.pack(fill="x", pady=8)
 
@@ -381,7 +620,7 @@ class MainWindow(ctk.CTk):
         cat_inner.pack(fill="x", padx=18, pady=16)
 
         ctk.CTkLabel(cat_inner, text="Curated E-Ink Application Catalog", font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"), text_color=self.COLOR_CYAN).pack(anchor="w")
-        ctk.CTkLabel(cat_inner, text="1-Click automatic download from official GitHub/GitLab releases and installation over ADB.", font=ctk.CTkFont(family="Segoe UI", size=11), text_color=self.COLOR_TEXT_MUTED).pack(anchor="w", pady=(2, 12))
+        ctk.CTkLabel(cat_inner, text="1-Click automatic download from official GitHub releases and installation over ADB.", font=ctk.CTkFont(family="Segoe UI", size=11), text_color=self.COLOR_TEXT_MUTED).pack(anchor="w", pady=(2, 12))
 
         for app in CURATED_EINK_APPS:
             row = ctk.CTkFrame(cat_inner, corner_radius=8, fg_color="#181D29", border_width=1, border_color="#222A3B")
@@ -462,6 +701,7 @@ class MainWindow(ctk.CTk):
         self.box_screenshot.pack(pady=10)
 
         ctk.CTkButton(r_inner, text="📸  Capture Live Screenshot", height=34, corner_radius=8, fg_color=self.COLOR_BLUE, hover_color="#2563EB", command=self._action_capture_screenshot).pack(fill="x", pady=3)
+        ctk.CTkButton(r_inner, text="📋  Copy to Windows Clipboard", height=34, corner_radius=8, fg_color="#283042", hover_color="#37435C", command=self._action_copy_screenshot_clipboard).pack(fill="x", pady=3)
         ctk.CTkButton(r_inner, text="💾  Save as PNG File...", height=34, corner_radius=8, fg_color="#283042", hover_color="#37435C", command=self._action_save_screenshot).pack(fill="x", pady=3)
 
         return page
@@ -680,6 +920,7 @@ class MainWindow(ctk.CTk):
         page.grid_rowconfigure(3, weight=1)
 
         self.pkg_widgets = {}
+        self.category_headers = {}
         self._populate_debloat_items()
 
         custom_box = ctk.CTkFrame(page, corner_radius=10, fg_color=self.COLOR_CARD, border_width=1, border_color=self.COLOR_CARD_BORDER)
@@ -702,11 +943,16 @@ class MainWindow(ctk.CTk):
             widget.destroy()
 
         self.pkg_widgets.clear()
+        self.category_headers.clear()
 
         for cat in DEBLOAT_CATALOG:
             cat_title = cat["category"]
             lbl_cat = ctk.CTkLabel(self.scroll_debloat, text=cat_title, font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"), text_color=self.COLOR_CYAN)
             lbl_cat.pack(anchor="w", padx=10, pady=(14, 6))
+            self.category_headers[cat_title] = {
+                "label": lbl_cat,
+                "packages": []
+            }
 
             for pkg, desc in cat["packages"]:
                 row = ctk.CTkFrame(self.scroll_debloat, corner_radius=8, fg_color="#1A1F2C", border_width=1, border_color="#262D3D")
@@ -728,17 +974,28 @@ class MainWindow(ctk.CTk):
                     "row": row,
                     "button": btn_toggle,
                     "desc": desc,
+                    "category": cat_title,
                     "disabled": False
                 }
+                self.category_headers[cat_title]["packages"].append(pkg)
 
     def _filter_debloat_items(self):
         query = self.entry_filter.get().strip().lower()
-        for pkg, data in self.pkg_widgets.items():
-            match = (query in pkg.lower()) or (query in data["desc"].lower())
-            if match or not query:
-                data["row"].pack(fill="x", pady=3)
+        for cat_title, cat_data in self.category_headers.items():
+            cat_has_matches = False
+            for pkg in cat_data["packages"]:
+                item = self.pkg_widgets[pkg]
+                match = (query in pkg.lower()) or (query in item["desc"].lower())
+                if match or not query:
+                    item["row"].pack(fill="x", pady=3)
+                    cat_has_matches = True
+                else:
+                    item["row"].pack_forget()
+
+            if cat_has_matches:
+                cat_data["label"].pack(anchor="w", padx=10, pady=(14, 6))
             else:
-                data["row"].pack_forget()
+                cat_data["label"].pack_forget()
 
     def _create_page_settings(self):
         page = ctk.CTkScrollableFrame(self.content_container, fg_color="transparent")
@@ -1033,12 +1290,21 @@ class MainWindow(ctk.CTk):
                 messagebox.showerror("Screenshot Error", f"Failed to capture screenshot:\n{err}")
                 return
             self._last_pil_screenshot = img
-            # Display thumbnail
             thumb = img.copy()
             thumb.thumbnail((200, 270), Image.Resampling.LANCZOS)
             self._ctk_screenshot_image = ctk.CTkImage(light_image=thumb, dark_image=thumb, size=thumb.size)
             self.after(0, lambda: self.box_screenshot.configure(image=self._ctk_screenshot_image, text=""))
         threading.Thread(target=_run, daemon=True).start()
+
+    def _action_copy_screenshot_clipboard(self):
+        if not self._last_pil_screenshot:
+            messagebox.showwarning("No Screenshot", "Capture a screenshot first.")
+            return
+        ok, msg = copy_pil_image_to_clipboard(self._last_pil_screenshot)
+        if ok:
+            messagebox.showinfo("Copied to Clipboard", "Screenshot copied to Windows clipboard! You can now paste (Ctrl+V) it anywhere.")
+        else:
+            messagebox.showerror("Clipboard Error", f"Failed to copy to clipboard:\n{msg}")
 
     def _action_save_screenshot(self):
         if not self._last_pil_screenshot:
@@ -1259,6 +1525,17 @@ class MainWindow(ctk.CTk):
                 f"Short-Press Enabled: {res['shortPressEnabled']}\n"
                 f"Raw Global Payload : {res['raw']}"
             )
+            # Synchronize dropdown selections to match device
+            for opt in self.opt_long_press._values:
+                if f"[{res['longPressAction']}]" in opt:
+                    self.after(0, lambda o=opt: self.opt_long_press.set(o))
+                    break
+
+            for opt in self.opt_short_press._values:
+                if (not res['shortPressAction'] and "[Recommended]" in opt) or (res['shortPressAction'] and f"[{res['shortPressAction']}]" in opt):
+                    self.after(0, lambda o=opt: self.opt_short_press.set(o))
+                    break
+
             self.after(0, lambda: self.lbl_active_mapping.configure(text=txt))
         threading.Thread(target=_run, daemon=True).start()
 
@@ -1399,6 +1676,19 @@ class MainWindow(ctk.CTk):
 
         if s.get("high_contrast") == "1": self.sw_contrast.select()
         else: self.sw_contrast.deselect()
+
+        # Update font scale and DPI
+        font_s = s.get("font_scale", "1.0")
+        for val in self.opt_font._values:
+            if font_s in val:
+                self.opt_font.set(val)
+                break
+
+        dpi_s = s.get("density", "212")
+        for val in self.opt_dpi._values:
+            if dpi_s in val or (dpi_s == "212" and "Default" in val):
+                self.opt_dpi.set(val)
+                break
 
         if show_dialog:
             messagebox.showinfo("Settings Queried", f"Current Device Values:\nTimeout: {s.get('screen_off_timeout')}ms\nFont: {s.get('font_scale')}\nDensity: {s.get('density')}")

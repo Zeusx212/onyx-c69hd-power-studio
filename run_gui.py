@@ -7,19 +7,20 @@ GUI Entry point.
 import sys
 import os
 
-# Ensure local directories are in python search path
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
 from core.adb_manager import ADBManager
 from core.device_ops import DeviceOps
+from core.scrcpy_manager import ScrcpyManager
 from gui.main_window import MainWindow
 
 def main():
     adb = ADBManager()
     ops = DeviceOps(adb)
-    app = MainWindow(adb, ops)
+    scrcpy = ScrcpyManager(log_callback=adb.log)
+    app = MainWindow(adb, ops, scrcpy)
     app.mainloop()
 
 if __name__ == "__main__":
