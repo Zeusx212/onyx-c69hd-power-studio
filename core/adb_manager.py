@@ -1,12 +1,20 @@
 """
 ADB and Fastboot execution manager for Onyx Boox C69HD.
-Provides robust process execution, device probing, and status parsing.
+Provides robust process execution, device probing, wireless ADB, screenshot capture, and status parsing.
 """
 
 import subprocess
 import shutil
 import re
 import os
+import io
+
+# Optional Pillow import for screenshot decoding
+try:
+    from PIL import Image
+    HAS_PILLOW = True
+except ImportError:
+    HAS_PILLOW = False
 
 class ADBManager:
     def __init__(self, log_callback=None):
@@ -56,17 +64,67 @@ class ADBManager:
         return self.run_cmd(list(args), tool="fastboot", timeout=timeout)
 
     def run_shell(self, shell_cmd, timeout=30):
-        """Runs `adb shell <cmd>`"""
         return self.run_adb("shell", shell_cmd, timeout=timeout)
 
+    def get_device_ip(self):
+        """Detects the Wi-Fi IP address of the connected device."""
+        ok, out, _ = self.run_shell("ip -4 route show dev wlan0")
+        if ok and out:
+            # e.g.: 192.168.1.0/24 proto kernel scope link src 192.168.1.11
+            m = re.search(r'src\s+(\d+\.\d+\.\d+\.\d+)', out)
+            if m:
+                return m.group(1)
+
+        # Fallback to ip addr
+        ok, out, _ = self.run_shell("ip -4 addr show wlan0")
+        if ok and out:
+            m = re.search(r'inet\s+(\d+\.\d+\.\d+\.\d+)', out)
+            if m:
+                return m.group(1)
+        return None
+
+    def enable_wireless_adb(self, port=5555):
+        """Enables wireless ADB on port 5555 and connects to device IP."""
+        ip = self.get_device_ip()
+        if not ip:
+            return False, "Could not determine device Wi-Fi IP address. Ensure device is connected to Wi-Fi."
+
+        self.log(f"Switching ADB daemon to TCP port {port}...")
+        ok, out, err = self.run_adb("tcpip", str(port))
+        if not ok:
+            return False, f"Failed to switch to tcpip mode: {err or out}"
+
+        self.log(f"Connecting to {ip}:{port}...")
+        ok, out, err = self.run_adb("connect", f"{ip}:{port}")
+        if ok and "connected" in out.lower():
+            return True, f"Successfully connected wirelessly to {ip}:{port}!"
+        return False, f"Failed to connect wirelessly: {out or err}"
+
+    def disconnect_wireless_adb(self):
+        """Disconnects wireless ADB connections and reverts to USB."""
+        self.run_adb("disconnect")
+        self.run_adb("usb")
+        return True, "Disconnected wireless ADB. Reverted to USB mode."
+
+    def capture_screenshot(self):
+        """Captures a screenshot via adb exec-out screencap -p and returns a PIL Image."""
+        if not HAS_PILLOW:
+            return None, "Pillow library is required for screenshot capture."
+        
+        full_cmd = [self.adb_bin, "exec-out", "screencap", "-p"]
+        try:
+            raw = subprocess.check_output(full_cmd, creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+            img = Image.open(io.BytesIO(raw))
+            return img, None
+        except Exception as e:
+            return None, str(e)
+
     def get_connected_device_info(self):
-        """
-        Polls ADB and fastboot to identify connection state and device properties.
-        Returns a dict of device metadata.
-        """
         info = {
             "connected": False,
             "mode": "none", # "adb", "fastboot", "none"
+            "is_wireless": False,
+            "ip_address": None,
             "serial": "N/A",
             "model": "Unknown",
             "manufacturer": "Unknown",
@@ -80,6 +138,8 @@ class ADBManager:
             "rooted": False,
             "battery_level": "N/A",
             "battery_charging": False,
+            "storage_avail": "N/A",
+            "storage_total": "N/A",
             "raw_devices": ""
         }
 
@@ -88,19 +148,16 @@ class ADBManager:
         if ok and out:
             lines = [l.strip() for l in out.splitlines() if l.strip() and not l.startswith("*")]
             if len(lines) > 1:
-                # First non-header line
                 parts = lines[1].split()
                 if len(parts) >= 2 and parts[1] == "device":
                     info["connected"] = True
                     info["mode"] = "adb"
                     info["serial"] = parts[0]
-                elif len(parts) >= 2 and parts[1] == "unauthorized":
-                    info["connected"] = True
-                    info["mode"] = "unauthorized"
-                    info["serial"] = parts[0]
-                    return info
+                    if ":" in parts[0]:
+                        info["is_wireless"] = True
+                        info["ip_address"] = parts[0].split(":")[0]
 
-        # If not found in ADB, check fastboot
+        # 2. Check fastboot if not in adb
         if not info["connected"]:
             ok, out, _ = self.run_fastboot("devices")
             if ok and out:
@@ -110,7 +167,6 @@ class ADBManager:
                     info["connected"] = True
                     info["mode"] = "fastboot"
                     info["serial"] = parts[0]
-                    # Probe fastboot getvar
                     ok_var, var_out, _ = self.run_fastboot("getvar", "current-slot")
                     if "current-slot:" in var_out:
                         slot = var_out.split("current-slot:")[-1].strip()
@@ -120,7 +176,11 @@ class ADBManager:
         if not info["connected"]:
             return info
 
-        # 2. Extract Device Properties via ADB shell
+        # Get device IP if not already wireless
+        if not info["ip_address"]:
+            info["ip_address"] = self.get_device_ip()
+
+        # Extract Device Properties
         ok, out, _ = self.run_shell("getprop ro.product.model; echo ---SEP---; getprop ro.product.manufacturer; echo ---SEP---; getprop ro.product.device; echo ---SEP---; getprop ro.build.display.id; echo ---SEP---; getprop ro.build.version.release; echo ---SEP---; getprop ro.boot.slot_suffix; echo ---SEP---; getprop ro.boot.flash.locked")
         if ok and out:
             props = [p.strip() for p in out.split("---SEP---")]
@@ -133,22 +193,18 @@ class ADBManager:
                 slot = props[5]
                 if slot in ["_a", "_b"]:
                     info["boot_slot"] = slot
-                if len(props) >= 7 and props[6] == "0":
-                    info["unlocked"] = True
-                else:
-                    info["unlocked"] = True # C69HD factory bootloader is unlocked
+                info["unlocked"] = True
 
-        # Determine if C69HD / Faust 5
         model_upper = (info["model"] + " " + info["device"]).upper()
         if "C69" in model_upper or "FAUST" in model_upper or "M_STAR" in model_upper:
             info["is_c69hd"] = True
 
-        # 3. Check Root (su)
+        # Check Root (su)
         ok_su, su_out, _ = self.run_shell("su -c 'id'")
         if ok_su and "uid=0" in su_out:
             info["rooted"] = True
 
-        # 4. Check Battery
+        # Check Battery
         ok_bat, bat_out, _ = self.run_shell("dumpsys battery")
         if ok_bat and bat_out:
             for l in bat_out.splitlines():
@@ -157,5 +213,15 @@ class ADBManager:
                 if "USB powered:" in l or "AC powered:" in l:
                     if "true" in l.lower():
                         info["battery_charging"] = True
+
+        # Check Storage
+        ok_df, df_out, _ = self.run_shell("df -h /sdcard")
+        if ok_df and df_out:
+            lines = df_out.splitlines()
+            if len(lines) >= 2:
+                parts = lines[1].split()
+                if len(parts) >= 4:
+                    info["storage_total"] = parts[1]
+                    info["storage_avail"] = parts[3]
 
         return info

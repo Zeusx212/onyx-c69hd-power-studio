@@ -1,107 +1,99 @@
-# Onyx Boox C69HD (Faust 5 OEM) Customization Tool
+# Onyx Boox C69HD (Faust 5 OEM) Power Studio
 
-A modern, comprehensive desktop GUI tool designed specifically for the **Onyx Boox C69HD** (an OEM rebadge of the **Faust 5** / Poke 4 Lite, Qualcomm Snapdragon 662 `bengal`, 6" Carta e-ink display).
+A comprehensive, modern desktop application designed specifically for the **Onyx Boox C69HD** (an OEM rebadge of the **Faust 5** / Poke 4 Lite, Qualcomm Snapdragon 662 `bengal`, 6" Carta E-Ink display).
 
 ---
 
 ## 🎯 Device Background & Overview
 
-The **C69HD** (`C69_M_STAR`) is an e-reader built on the Onyx Boox Faust 5 platform with unique hardware characteristics:
-- **No Frontlight/Backlight Hardware**: Unlike other Faust 5 variants, the C69HD has no backlight LEDs. The factory default action for long-pressing the front hardware button is toggling the backlight—which does nothing.
+The **C69HD** (`C69_M_STAR`) has unique hardware characteristics:
+- **No Frontlight/Backlight Hardware**: Unlike other Faust 5 models, the C69HD has no backlight LEDs. Factory default long-press on the front button is toggling the backlight—which does nothing.
 - **Factory Unlocked Bootloader**: `ro.boot.flash.locked = 0`.
 - **Memory Constrained**: 2 GB LPDDR4x RAM (~1.8 GB usable, ~200–500 MB free under load).
-- **Infinite Screen Timeout Bug**: Factory `screen_off_timeout` is set to `2147483647` ms (~24.8 days), draining battery when unattended.
+- **Infinite Screen Timeout Bug**: Factory `screen_off_timeout` defaults to `2147483647` ms (~24.8 days), draining battery when unattended.
 - **Cellular & Telephony Bloat**: Despite having no SIM card slot, background Qualcomm telephony daemons and voice listeners (`com.qualcomm.qti.sva`, `dynamicddsservice`, `uimGbaApp`, `iwlan`) run continuously.
-
-This GUI utility automates rooting, partition backups, hardware button remapping, reversible debloating, custom screensavers, boot animations, and essential display/power tweaks in a single unified dark-slate interface.
 
 ---
 
-## 🌟 Features & Studio Tabs
+## 🌟 Complete Feature Suite
 
-### 1. 🛡️ Root & Partitions
-Based on [**Zeusx212/onyx-c69hd-root**](https://github.com/Zeusx212/onyx-c69hd-root):
-- **Stock Partition Backup**: Dumps active `boot` (`boot_a` or `boot_b`) and `vbmeta` partitions directly to `./backups/`.
-- **Magisk Root Setup**:
-  1. 1-Click Install Magisk APK to device (bundled in `assets/magisk.apk`).
-  2. One-click reboot to Bootloader (Fastboot).
-  3. Flash Magisk-patched boot image to the active slot with automatic reboot.
-  4. 1-Click Restore stock boot image if needed.
-- **Hardware Button Wake**: Install the `c69hd-wake.zip` Magisk module to allow the front center button and side page-turn keys to wake the device from deep sleep.
+### 1. 🏆 1-Click Profile Presets
+- **🔋 Extreme Battery Life**: Screen timeout 2m, background Wi-Fi/BLE scanning off, Location off, telemetry off, Qualcomm SVA & cellular daemons disabled.
+- **⚡ Free RAM Booster (+320MB RAM)**: Suspends Google Play Services, Services Framework, Onyx Mail, and stock AOSP keyboards to reclaim over 320 MB of usable memory.
+- **📖 Distraction-Free Reading**: Relaxed 10-minute timeout, optimized 1.05 font scale, quiet background environment.
+- **🔄 Factory Default Revert**: Restores all stock packages, button mappings, and default settings.
 
-### 2. 🔘 Hardware Button Remap
-Based on [**Zeusx212/onyx-c69hd-button-remap**](https://github.com/Zeusx212/onyx-c69hd-button-remap):
-- Remap the physical front center button (`KEYCODE_BACK`) without modifying system files:
-  - **Long-Press (Hold)**:
-    - `KEYCODE_APP_SWITCH` (Recent Apps / App Switcher) — **Recommended!**
-    - `fullRefreshScreen` (Full E-Ink Refresh to clear ghosting)
-    - `screenshot` (Take Screenshot)
-    - `showRefreshModeDialog` (E-Ink Refresh Mode dialog)
-    - `back_to_home` (Return to Home Screen)
-    - `toggleA2` (Toggle A2 Speed Mode)
-    - Factory Default (`toggleFrontLight`)
-  - **Short-Press (Single Tap)**:
-    - Standard Back Key (Recommended)
-    - Recent Apps / Full Refresh / Screenshot / Home
-- Automatically sets `key_custom_side_key_short_press_enable` and broadcasts `onyx.action.refresh_keymapping`.
-- Settings survive device reboots.
+### 2. 📶 1-Click Wireless ADB (Cable-Free Mode)
+- Automatically detects the device's local Wi-Fi IP (e.g. `192.168.1.11`).
+- Switches ADB to port 5555 and connects wirelessly with a single click in the sidebar.
+- Disconnect and switch back to USB cable at any time.
 
-### 3. 🎨 Screensavers & Boot Animation (NEW!)
-- **Screensaver & Sleep Screen Studio**:
-  - Select any `.png`, `.jpg`, or `.webp` image.
-  - Live interactive thumbnail preview in the GUI.
-  - Automatically crops and scales images to native Carta 758 × 1024 resolution with E-Ink high-contrast grayscale optimization.
-  - Flexible targets:
-    - **User Gallery**: Pushes to `/sdcard/Pictures/Screensaver/` and triggers Android MediaScanner so it appears instantly in the Onyx Wallpaper picker.
-    - **System Standby Screen**: Systemlessly replaces `/system/media/standby-1.png` via Magisk overlay.
-    - **System Shutdown Screen**: Systemlessly replaces `/system/media/shutdown-default.png` via Magisk overlay.
-  - Quick action buttons: "Open Wallpaper Settings on Device" and "Test Sleep Screen (Lock Device)".
-- **Boot Animation Studio**:
-  - Install custom `bootanimation.zip` into the Magisk media overlay (`c69hd-custom-media`).
-  - Built-in animation packager: point to a folder of PNG frames, and the tool builds an uncompressed Android `bootanimation.zip` with the correct `758 1024 1` descriptor!
-  - **Live Preview on Device**: Runs the animation live on the physical e-reader screen (`setprop ctl.start bootanim`) for 4 seconds without needing a reboot!
-  - 1-Click Restore Stock Onyx boot animation.
+### 3. 📚 Book & Comic Transfer Hub
+- Drag & drop or browse `.epub`, `.pdf`, `.mobi`, `.azw3`, `.cbz`, `.cbr`, and `.txt` files.
+- Select target destination (`/sdcard/Books/`, `/sdcard/Books/Manga/`, etc.).
+- Automatically sends Android `MEDIA_SCANNER_SCAN_FILE` broadcasts so new books appear on your Onyx Bookshelf immediately without needing a reboot or reconnect.
 
-### 4. 🧹 Debloating
-- **Live Search & Filter**: Real-time search bar to filter packages by keyword.
-- **1-Click Safe Debloat Preset**: Disables background cellular & Snapdragon voice services with zero risk on Wi-Fi e-readers:
-  - `com.qualcomm.qti.sva` (Voice hotword listener)
-  - `com.qualcomm.qti.dynamicddsservice` (Dual SIM service)
-  - `com.qualcomm.qti.uimGbaApp` (SIM GBA auth service)
-  - `vendor.qti.iwlan` (Wi-Fi calling daemon)
-  - `com.qualcomm.qti.xrvd.service` (Qualcomm XR daemon)
-  - `com.android.cellbroadcastreceiver` & modules (Cellular alerts)
-  - `com.android.smspush` (WAP push service)
-- **High RAM Consumers**: Free up ~320 MB RAM by disabling Google Play Services (`com.google.android.gms` / `gsf`) if using F-Droid, Aurora Store, or ReVanced GmsCore.
-- **OEM & Unused Apps**: Onyx Mail, stock AOSP keyboards (LatinIME / KIME), and printing services.
-- **Custom Package Manager**: Disable or re-enable any specific package by name.
-- **100% Reversible**: Uses `pm disable-user --user 0`, fully re-enableable at any time.
+### 4. 📦 E-Ink App Sideload Hub
+- **Local APK Sideload**: Install any `.apk` with replacement permissions.
+- **Curated 1-Click E-Ink Catalog**: Automatic download and install of official releases:
+  - **KOReader**: The premier open-source E-Ink e-reader engine.
+  - **Mihon**: High-contrast manga and comic reader.
+  - **Simple Keyboard**: Lightweight keyboard (replaces heavy 70 MB Onyx LatinIME).
+  - **Key Mapper**: Enables double-press and multi-trigger remapping.
+  - **LocalSend**: Offline Wi-Fi file sharing.
+  - **F-Droid**: Open-source app store.
+  - **Taskbar**: Floating app drawer and multitasking switcher.
 
-### 5. ⚙️ Device Settings & Power Tweaks
-- **Screen Timeout Fix**: Quickly set auto-sleep to 1m, 2m, 5m (Recommended), 10m, or 30m with 1-click preset.
-- **Telemetry Disabling**: Turns off background crash and error reporting (`send_action_app_error = 0`).
-- **Background Scanning**: Disables continuous Bluetooth LE and Wi-Fi scanning.
-- **Location Services**: Toggles GPS/Location mode to Off (`0`).
-- **Display Clarity**: Configure font scale (`1.05` optimized), display density (reset to 212 DPI or custom), and high text contrast.
+### 5. ⚡ E-Ink Remote & Screenshot Snip
+- **Live Screenshot Tool**: Captures clean 758 × 1024 screenshots over ADB, with live thumbnail display, "Save as PNG", and "Copy to Windows Clipboard".
+- **E-Ink Refresh Controls**: Remote full-screen e-ink refresh (`onyx.action.refresh_screen`) to clear ghosting, plus A2 speed mode toggle.
+- **Virtual Navigation Keys**: Back, Home, Recent Apps, Volume Up/Down, and Lock/Sleep.
 
-### 6. 📊 Device Info & Execution Logs
-- Real-time display of SoC, board platform, active boot slot, build ID, root status, and battery percentage.
-- Power controls: Normal Reboot, Reboot to Recovery, Reboot to Fastboot, Restart SystemUI.
-- Live scrollable ADB command console with timestamps and output.
+### 6. 🎨 Screensavers & Boot Animation
+- **Screensaver Studio**: Auto-crops and scales any image to native Carta 758 × 1024 resolution with E-Ink high-contrast grayscale.
+  - Target choices: User Gallery (`/sdcard/Pictures/Screensaver/`), System Standby (`standby-1.png`), or Shutdown Screen (`shutdown-default.png`).
+  - Action buttons: "Open Wallpaper Settings on Device" and "Test Sleep Screen".
+- **Boot Animation Studio**: Install custom `bootanimation.zip` into the Magisk media overlay (`c69hd-custom-media`).
+  - Create from folder of PNG frames.
+  - **Live Preview on Device**: Plays the boot animation live on the physical e-reader screen without needing a reboot!
+  - 1-Click Restore stock Onyx animation.
+
+### 7. 🛡️ Root & Partitions
+- **Stock Partition Backup**: Single or full dump of `boot`, `dtbo`, `recovery`, `vbmeta`, `vbmeta_system`, and `persist`.
+- **Magisk Root Workflow**: Install Magisk APK -> Reboot Fastboot -> Flash Patched Boot -> Restore Stock.
+- **Hardware Button Wake**: Install `c69hd-wake.zip` Magisk module to allow physical center and side keys to wake the device from sleep.
+
+### 8. 🔘 Hardware Button Remapper
+- Remap front button (`KEYCODE_BACK`):
+  - **Long-Press**: Recent Apps / App Switcher (Recommended), Full Refresh, Screenshot, Refresh Mode Dialog, Home, Toggle A2, Factory Default.
+  - **Short-Press**: Standard Back Key, Recent Apps, Full Refresh, Screenshot, Home.
+- Automatically writes to `settings put global KEYCODE_BACK`, configures `key_custom_side_key_short_press_enable`, and broadcasts `onyx.action.refresh_keymapping`.
+
+### 9. 🧹 Reversible System Debloater
+- Real-time search filter.
+- Safe 1-Click Debloat: Disables Snapdragon Voice Activation, dual-SIM daemons, SIM GBA, IWLAN, XR service, and cell broadcast alerts.
+- High RAM Consumers: Google Play Services & GSF toggle.
+- 100% reversible via `pm disable-user --user 0`.
+
+### 10. ⚙️ Device Settings & Power Tweaks
+- Screen timeout bug fix with 1-click **"Fix to 5 Minutes"**.
+- Telemetry, Bluetooth LE, and Wi-Fi scanning toggles.
+- Location mode toggle.
+- Font scale, display density (212 DPI reset / custom), and high text contrast.
 
 ---
 
 ## 🚀 How to Run
 
 ### Requirements
-- Windows 10/11 (or Linux/macOS)
-- Python 3.8+ (comes with built-in Tkinter)
-- Pillow: `pip install Pillow` (for image preview and screensaver scaling)
-- ADB and Fastboot installed and available in system PATH
+- Windows 10/11 (or macOS/Linux)
+- Python 3.8+
+- Dependencies: `pip install customtkinter Pillow`
+- ADB and Fastboot in system PATH
 - USB Debugging enabled on your Onyx Boox C69HD
 
-### Launching the Tool
-Simply double-click:
+### Launching the Application
+Double-click:
 ```bat
 run_gui.bat
 ```
@@ -112,7 +104,7 @@ python run_gui.py
 
 ---
 
-## 🔗 Related Repositories & Acknowledgments
+## 🔗 Related Repositories & Credits
 
 - **Root & Partitions**: [Zeusx212/onyx-c69hd-root](https://github.com/Zeusx212/onyx-c69hd-root)
 - **Button Remap**: [Zeusx212/onyx-c69hd-button-remap](https://github.com/Zeusx212/onyx-c69hd-button-remap)

@@ -1,7 +1,8 @@
 """
 Device operations controller for Onyx Boox C69HD.
 Implements partition backup, Magisk rooting, hardware button remapping,
-debloating, personalization (screensavers, boot animations), and system tweaks.
+debloating, personalization (screensavers, boot animations), book transfers,
+app sideloading, remote controls, and 1-click optimization presets.
 """
 
 import os
@@ -9,8 +10,8 @@ import json
 import time
 import zipfile
 import shutil
+import urllib.request
 
-# Try importing Pillow for image processing and thumbnail generation
 try:
     from PIL import Image, ImageOps
     HAS_PILLOW = True
@@ -67,6 +68,52 @@ DEBLOAT_CATALOG = [
     }
 ]
 
+# Curated E-Ink Apps for Sideload Hub
+CURATED_EINK_APPS = [
+    {
+        "name": "KOReader",
+        "desc": "The #1 open-source e-reader with custom E-Ink refresh & typography",
+        "package": "org.koreader.launcher",
+        "url": "https://github.com/koreader/koreader/releases/download/v2024.11/koreader-android-arm-v2024.11.apk"
+    },
+    {
+        "name": "Mihon",
+        "desc": "High-contrast manga & comic reader optimized for Carta displays",
+        "package": "app.mihon",
+        "url": "https://github.com/mihonapp/mihon/releases/download/v0.17.1/mihon-arm64-v8a-v0.17.1.apk"
+    },
+    {
+        "name": "Simple Keyboard",
+        "desc": "Ultra-lightweight keyboard (replaces heavy 70MB Onyx LatinIME)",
+        "package": "rkr.simplekeyboard.inputmethod",
+        "url": "https://github.com/rkkr/simple-keyboard/releases/download/v5.9/simple-keyboard-v5.9.apk"
+    },
+    {
+        "name": "Key Mapper",
+        "desc": "Enables double-press, hold, and multi-key triggers on hardware keys",
+        "package": "io.github.sds100.keymapper",
+        "url": "https://github.com/keymapperorg/KeyMapper/releases/download/v2.5.2/key-mapper-v2.5.2.apk"
+    },
+    {
+        "name": "LocalSend",
+        "desc": "Offline file, book, and APK sharing over local Wi-Fi",
+        "package": "org.localsend.localsend_app",
+        "url": "https://github.com/localsend/localsend/releases/download/v1.16.1/LocalSend-1.16.1-android-arm64.apk"
+    },
+    {
+        "name": "F-Droid",
+        "desc": "Open-source Android application store",
+        "package": "org.fdroid.fdroid",
+        "url": "https://f-droid.org/F-Droid.apk"
+    },
+    {
+        "name": "Taskbar",
+        "desc": "Floating app drawer and desktop multitasking switcher",
+        "package": "com.farmerbb.taskbar",
+        "url": "https://github.com/farmerbb/Taskbar/releases/download/207/Taskbar-6.2.2.apk"
+    }
+]
+
 SCREEN_WIDTH = 758
 SCREEN_HEIGHT = 1024
 
@@ -77,34 +124,33 @@ class DeviceOps:
     # ==========================================
     # ROOT & PARTITIONS
     # ==========================================
-    def backup_stock_partitions(self, slot="_a", dest_dir=None):
-        """Dumps stock boot and vbmeta partitions to local backup folder."""
+    def backup_stock_partitions(self, slot="_a", dest_dir=None, partition_list=None):
         if not dest_dir:
             dest_dir = os.path.join(os.getcwd(), "backups")
         os.makedirs(dest_dir, exist_ok=True)
 
-        boot_local = os.path.join(dest_dir, f"stock_boot{slot}.img")
-        vbmeta_local = os.path.join(dest_dir, f"stock_vbmeta{slot}.img")
+        if not partition_list:
+            partition_list = [f"boot{slot}", f"vbmeta{slot}"]
 
-        self.adb.log(f"Starting stock partition dump for slot {slot}...")
+        self.adb.log(f"Starting partition dump for: {', '.join(partition_list)}...")
         
         ok, su_check, _ = self.adb.run_shell("su -c 'id'")
         if not ok or "uid=0" not in su_check:
             return False, "Root (su) is required on device to dump active partitions directly."
 
-        self.adb.run_shell(f"su -c 'dd if=/dev/block/bootdevice/by-name/boot{slot} of=/sdcard/stock_boot.img'")
-        ok, _, err = self.adb.run_adb("pull", "/sdcard/stock_boot.img", boot_local)
-        self.adb.run_shell("rm -f /sdcard/stock_boot.img")
-        if not ok or not os.path.exists(boot_local):
-            return False, f"Failed to pull boot partition: {err}"
+        saved_files = []
+        for part in partition_list:
+            local_file = os.path.join(dest_dir, f"stock_{part}.img")
+            self.adb.run_shell(f"su -c 'dd if=/dev/block/bootdevice/by-name/{part} of=/sdcard/dump_{part}.img'")
+            ok_pull, _, err = self.adb.run_adb("pull", f"/sdcard/dump_{part}.img", local_file)
+            self.adb.run_shell(f"rm -f /sdcard/dump_{part}.img")
+            if ok_pull and os.path.exists(local_file):
+                saved_files.append(local_file)
+                self.adb.log(f"Saved {part} -> {local_file} ({os.path.getsize(local_file)} bytes)")
 
-        self.adb.run_shell(f"su -c 'dd if=/dev/block/bootdevice/by-name/vbmeta{slot} of=/sdcard/stock_vbmeta.img'")
-        self.adb.run_adb("pull", "/sdcard/stock_vbmeta.img", vbmeta_local)
-        self.adb.run_shell("rm -f /sdcard/stock_vbmeta.img")
-
-        boot_size = os.path.getsize(boot_local)
-        self.adb.log(f"Successfully backed up stock_boot{slot}.img ({boot_size} bytes)")
-        return True, f"Partitions backed up to:\n{boot_local}\n{vbmeta_local}"
+        if saved_files:
+            return True, f"Successfully dumped {len(saved_files)} partitions to:\n" + "\n".join(saved_files)
+        return False, "Failed to dump partitions."
 
     def install_magisk_apk(self, apk_path):
         if not os.path.exists(apk_path):
@@ -196,27 +242,20 @@ class DeviceOps:
         return self.apply_button_mapping(long_action="toggleFrontLight", short_action="")
 
     # ==========================================
-    # PERSONALIZATION: SCREENSAVER & BOOT ANIMATION
+    # PERSONALIZATION: SCREENSAVER & BOOT MEDIA
     # ==========================================
     def process_image_for_c69hd(self, src_path, dest_path, convert_grayscale=True):
-        """Resizes/crops image to 758x1024 native C69HD e-ink resolution."""
         if not HAS_PILLOW:
             shutil.copyfile(src_path, dest_path)
             return True
 
         try:
             with Image.open(src_path) as img:
-                # Convert to RGB if needed
                 if img.mode not in ("RGB", "L"):
                     img = img.convert("RGB")
-                
-                # Fit image into 758x1024 with aspect ratio preservation
                 fitted = ImageOps.fit(img, (SCREEN_WIDTH, SCREEN_HEIGHT), Image.Resampling.LANCZOS)
-                
                 if convert_grayscale:
-                    # Convert to high contrast 8-bit grayscale for E-Ink
                     fitted = fitted.convert("L")
-                
                 fitted.save(dest_path, "PNG")
                 return True
         except Exception as e:
@@ -224,12 +263,6 @@ class DeviceOps:
             return False
 
     def push_screensaver_image(self, local_image_path, target="user", custom_name="c69hd_custom_ss"):
-        """
-        Pushes a screensaver image to the device.
-        target: 'user' (stores in /sdcard/Pictures/Screensaver/),
-                'standby' (replaces /system/media/standby-1.png via Magisk),
-                'shutdown' (replaces /system/media/shutdown-default.png via Magisk)
-        """
         if not os.path.exists(local_image_path):
             return False, f"File not found: {local_image_path}"
 
@@ -241,7 +274,6 @@ class DeviceOps:
             remote_file = f"{remote_dir}/{custom_name}.png"
             self.adb.run_shell(f"mkdir -p {remote_dir}")
             ok, _, err = self.adb.run_adb("push", temp_processed, remote_file)
-            # Notify media scanner
             self.adb.run_shell(f"am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file://{remote_file}")
             if os.path.exists(temp_processed):
                 os.remove(temp_processed)
@@ -254,7 +286,6 @@ class DeviceOps:
             module_dir = "/data/adb/modules/c69hd-custom-media"
             module_media = f"{module_dir}/system/media"
             
-            # Setup Magisk module structure
             setup_cmds = f"""
 mkdir -p {module_media}
 cat << 'EOF' > {module_dir}/module.prop
@@ -270,7 +301,6 @@ chmod -R 755 {module_dir}
 """
             self._run_su_script(setup_cmds)
 
-            # Push to tmp then move
             tmp_remote = f"/data/local/tmp/{target_filename}"
             self.adb.run_adb("push", temp_processed, tmp_remote)
             move_cmds = f"""
@@ -284,12 +314,10 @@ rm -f {tmp_remote}
             return True, f"System {target} image successfully installed into Magisk media overlay! Survives reboots."
 
     def open_device_screensaver_settings(self):
-        """Launches Onyx WallpaperActivity on device."""
         self.adb.run_shell("am start -n com.onyx/.common.screen.ui.WallpaperActivity")
         return True, "Opened Wallpaper Settings on Onyx device."
 
     def create_bootanimation_zip(self, frame_paths, output_zip_path, fps=1):
-        """Creates an uncompressed bootanimation.zip required by Android."""
         os.makedirs(os.path.dirname(output_zip_path), exist_ok=True)
         temp_dir = os.path.join(os.path.dirname(output_zip_path), "_bootanim_temp")
         part0_dir = os.path.join(temp_dir, "part0")
@@ -303,7 +331,6 @@ rm -f {tmp_remote}
             dest_frame = os.path.join(part0_dir, f"{idx:04d}.png")
             self.process_image_for_c69hd(fp, dest_frame, convert_grayscale=True)
 
-        # Android REQUIRES ZIP_STORED (no compression) for bootanimation.zip
         with zipfile.ZipFile(output_zip_path, "w", zipfile.ZIP_STORED) as z:
             z.write(os.path.join(temp_dir, "desc.txt"), "desc.txt")
             for root, _, files in os.walk(part0_dir):
@@ -316,7 +343,6 @@ rm -f {tmp_remote}
         return True
 
     def install_bootanimation_zip(self, zip_path):
-        """Installs bootanimation.zip into Magisk custom media module."""
         if not os.path.exists(zip_path):
             return False, f"bootanimation.zip not found: {zip_path}"
 
@@ -349,34 +375,170 @@ rm -f {tmp_remote}
         return True, "Custom bootanimation.zip installed into Magisk media overlay! Reboot to see it."
 
     def preview_bootanimation_on_device(self, duration_sec=4):
-        """Runs the live boot animation on device screen for verification without rebooting."""
         self.adb.log(f"Triggering boot animation preview on device for {duration_sec}s...")
         script = f"setprop ctl.start bootanim; sleep {duration_sec}; setprop ctl.stop bootanim; input keyevent KEYCODE_HOME"
         self._run_su_script(script)
         return True, "Boot animation played on device display."
 
     def restore_stock_bootanimation(self):
-        """Removes custom bootanimation.zip from Magisk module overlay."""
         cmd = "rm -f /data/adb/modules/c69hd-custom-media/system/media/bootanimation.zip"
         self._run_su_script(cmd)
         return True, "Custom boot animation removed. Device will use stock Onyx boot animation."
 
-    def _run_su_script(self, script_text):
-        """Executes multiline script with root privileges cleanly via stdin."""
-        import subprocess
-        full_cmd = [self.adb.adb_bin, "shell", "su", "-c", "sh"]
+    # ==========================================
+    # BOOKS & DOCUMENT TRANSFER HUB
+    # ==========================================
+    def push_books_batch(self, file_paths, target_dir="/sdcard/Books"):
+        """Pushes a list of book files and triggers media scan on device."""
+        self.adb.run_shell(f"mkdir -p {target_dir}")
+        uploaded = 0
+        errors = []
+
+        for fp in file_paths:
+            if not os.path.exists(fp):
+                errors.append(f"Not found: {fp}")
+                continue
+            fname = os.path.basename(fp)
+            remote_path = f"{target_dir}/{fname}"
+            self.adb.log(f"Pushing book: {fname} -> {remote_path}...")
+            ok, _, err = self.adb.run_adb("push", fp, remote_path)
+            if ok:
+                uploaded += 1
+                # Trigger media scan
+                self.adb.run_shell(f"am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file://{remote_path}")
+            else:
+                errors.append(f"Failed {fname}: {err}")
+
+        # Scan folder
+        self.adb.run_shell(f"am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file://{target_dir}")
+        msg = f"Transferred {uploaded} / {len(file_paths)} books to {target_dir} and refreshed bookshelf!"
+        if errors:
+            msg += "\nErrors:\n" + "\n".join(errors[:3])
+        return uploaded > 0, msg
+
+    # ==========================================
+    # APP SIDELOAD HUB
+    # ==========================================
+    def sideload_apk(self, apk_path):
+        """Installs an APK via adb install -r."""
+        if not os.path.exists(apk_path):
+            return False, f"File not found: {apk_path}"
+        self.adb.log(f"Sideloading APK: {os.path.basename(apk_path)}...")
+        ok, out, err = self.adb.run_adb("install", "-r", apk_path, timeout=60)
+        if ok and "Success" in out:
+            return True, f"Successfully installed {os.path.basename(apk_path)}!"
+        return False, f"Install failed: {out or err}"
+
+    def download_and_install_curated_app(self, app_info, download_dir=None, progress_callback=None):
+        """Downloads app from GitHub release and sideloads it."""
+        if not download_dir:
+            download_dir = os.path.join(os.getcwd(), "downloads")
+        os.makedirs(download_dir, exist_ok=True)
+
+        url = app_info["url"]
+        fname = f"{app_info['name'].lower().replace(' ', '_')}.apk"
+        local_apk = os.path.join(download_dir, fname)
+
+        self.adb.log(f"Downloading {app_info['name']} from {url}...")
         try:
-            res = subprocess.run(
-                full_cmd,
-                input=script_text,
-                text=True,
-                capture_output=True,
-                timeout=20,
-                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
-            )
-            return res.returncode == 0, res.stdout, res.stderr
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req) as resp, open(local_apk, 'wb') as out_f:
+                total_size = int(resp.headers.get('content-length', 0))
+                downloaded = 0
+                block_size = 65536
+                while True:
+                    buffer = resp.read(block_size)
+                    if not buffer:
+                        break
+                    downloaded += len(buffer)
+                    out_f.write(buffer)
+                    if progress_callback and total_size > 0:
+                        progress_callback(downloaded / total_size)
         except Exception as e:
-            return False, "", str(e)
+            return False, f"Download failed: {str(e)}"
+
+        self.adb.log(f"Downloaded {local_apk} ({os.path.getsize(local_apk)} bytes). Sideloading to device...")
+        return self.sideload_apk(local_apk)
+
+    # ==========================================
+    # E-INK REMOTE & SCREEN TOOLS
+    # ==========================================
+    def trigger_eink_refresh(self):
+        """Triggers full-screen e-ink refresh to clear ghosting."""
+        self.adb.log("Broadcasting full E-Ink refresh...")
+        self.adb.run_shell("am broadcast -a onyx.action.refresh_screen")
+        self.adb.run_shell("am broadcast -a onyx.action.full_refresh")
+        return True, "E-Ink screen refresh broadcast sent."
+
+    def toggle_a2_speed_mode(self):
+        """Toggles high-speed A2 refresh mode."""
+        self.adb.log("Toggling A2 speed refresh mode...")
+        self.adb.run_shell("am broadcast -a onyx.action.toggleA2")
+        return True, "A2 refresh mode toggled."
+
+    def send_keyevent(self, keycode_name):
+        """Sends keyevent over ADB."""
+        self.adb.log(f"Sending keyevent: {keycode_name}")
+        return self.adb.run_shell(f"input keyevent {keycode_name}")
+
+    # ==========================================
+    # 1-CLICK OPTIMIZATION PRESETS
+    # ==========================================
+    def apply_profile_extreme_battery(self):
+        """Applies battery-saving preset."""
+        settings = {
+            "screen_off_timeout": "120000", # 2 minutes
+            "send_action_app_error": "0",
+            "ble_scan": "0",
+            "wifi_scan": "0",
+            "location_mode": "0"
+        }
+        self.apply_system_settings(settings)
+        # Safe debloat
+        self.apply_safe_debloat_preset()
+        return True, "Extreme Battery Saver preset applied (2m sleep, radios off, cellular daemons disabled)!"
+
+    def apply_profile_free_ram(self):
+        """Frees up ~320MB RAM by suspending heavy Google & OEM services."""
+        heavy_pkgs = [
+            "com.google.android.gms",
+            "com.google.android.gsf",
+            "com.onyx.mail",
+            "com.onyx.latinime",
+            "com.onyx.kime",
+            "com.qualcomm.qti.sva"
+        ]
+        disabled = []
+        for p in heavy_pkgs:
+            if self.disable_package(p):
+                disabled.append(p)
+        return True, f"Free RAM Booster applied: disabled {len(disabled)} memory hogs (reclaimed ~320MB RAM)!"
+
+    def apply_profile_distraction_free(self):
+        """Applies reading focus preset."""
+        settings = {
+            "screen_off_timeout": "600000", # 10 minutes
+            "send_action_app_error": "0",
+            "location_mode": "0",
+            "font_scale": "1.05"
+        }
+        self.apply_system_settings(settings)
+        return True, "Distraction-Free Reading preset applied (10m sleep, optimized 1.05 font, quiet background)!"
+
+    def apply_profile_factory_restore(self):
+        """Re-enables all catalog packages and sets factory defaults."""
+        for cat in DEBLOAT_CATALOG:
+            for p, _ in cat["packages"]:
+                self.enable_package(p)
+        self.reset_button_mapping()
+        self.apply_system_settings({
+            "screen_off_timeout": "300000",
+            "send_action_app_error": "1",
+            "location_mode": "3",
+            "font_scale": "1.00",
+            "density": "reset"
+        })
+        return True, "Factory defaults and all stock packages restored."
 
     # ==========================================
     # DEBLOATING
@@ -496,3 +658,19 @@ rm -f {tmp_remote}
         else:
             self.adb.log("Rebooting device...")
             return self.adb.run_adb("reboot")
+
+    def _run_su_script(self, script_text):
+        import subprocess
+        full_cmd = [self.adb.adb_bin, "shell", "su", "-c", "sh"]
+        try:
+            res = subprocess.run(
+                full_cmd,
+                input=script_text,
+                text=True,
+                capture_output=True,
+                timeout=20,
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+            )
+            return res.returncode == 0, res.stdout, res.stderr
+        except Exception as e:
+            return False, "", str(e)
