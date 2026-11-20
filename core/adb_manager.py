@@ -9,6 +9,8 @@ import re
 import os
 import io
 
+from core.adb_installer import find_existing_platform_tools, install_platform_tools
+
 # Optional Pillow import for screenshot decoding
 try:
     from PIL import Image
@@ -19,8 +21,36 @@ except ImportError:
 class ADBManager:
     def __init__(self, log_callback=None):
         self.log_callback = log_callback
-        self.adb_bin = shutil.which("adb") or "adb"
-        self.fastboot_bin = shutil.which("fastboot") or "fastboot"
+        tools = find_existing_platform_tools()
+        self.adb_bin = tools["adb"] or "adb"
+        self.fastboot_bin = tools["fastboot"] or "fastboot"
+        self._installed = tools["installed"]
+        self._version = tools["version"]
+
+    def is_available(self):
+        """Returns True if a valid adb executable exists."""
+        if os.path.isabs(self.adb_bin):
+            return os.path.isfile(self.adb_bin)
+        return shutil.which(self.adb_bin) is not None
+
+    def get_tool_info(self):
+        """Returns metadata about the ADB installation."""
+        return {
+            "installed": self.is_available(),
+            "adb_path": self.adb_bin,
+            "fastboot_path": self.fastboot_bin,
+            "version": self._version or "Unknown"
+        }
+
+    def install_tools(self, progress_callback=None):
+        """Downloads and sets up official platform tools."""
+        ok, adb, fb, ver = install_platform_tools(progress_callback=progress_callback)
+        if ok:
+            self.adb_bin = adb
+            self.fastboot_bin = fb
+            self._installed = True
+            self._version = ver
+        return ok, ver
 
     def log(self, message):
         if self.log_callback:

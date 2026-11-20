@@ -201,6 +201,18 @@ class MainWindow(ctk.CTk):
         )
         self.lbl_status_badge.pack(anchor="w", padx=12, pady=(0, 8))
 
+        # 1-Click ADB Installer button (shown if ADB is missing)
+        self.btn_sidebar_install_adb = ctk.CTkButton(
+            status_box,
+            text="📥 Auto-Install ADB & Fastboot",
+            height=30,
+            corner_radius=6,
+            fg_color=self.COLOR_GREEN,
+            hover_color="#059669",
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            command=self._action_install_adb
+        )
+
         self.btn_wireless = ctk.CTkButton(
             status_box,
             text="📶 Connect via Wi-Fi",
@@ -1208,9 +1220,56 @@ class MainWindow(ctk.CTk):
         ctk.CTkButton(pwr_card, text="⚡ Reboot Fastboot", height=32, corner_radius=6, fg_color="#283042", command=lambda: self.ops.reboot_device("bootloader")).pack(fill="x", padx=16, pady=2)
         ctk.CTkButton(pwr_card, text="🔄 Restart SystemUI", height=32, corner_radius=6, fg_color="#283042", command=lambda: self.ops.reboot_device("systemui")).pack(fill="x", padx=16, pady=(2, 14))
 
+        # Android SDK Platform-Tools (ADB & Fastboot) Environment Card
+        env_card = ctk.CTkFrame(page, corner_radius=12, fg_color=self.COLOR_CARD, border_width=1, border_color=self.COLOR_CARD_BORDER)
+        env_card.grid(row=3, column=0, sticky="ew", pady=(0, 10))
+
+        env_head = ctk.CTkFrame(env_card, fg_color="transparent")
+        env_head.pack(fill="x", padx=16, pady=(12, 4))
+        ctk.CTkLabel(env_head, text="Android SDK Platform-Tools (ADB & Fastboot) Environment", font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"), text_color=self.COLOR_CYAN).pack(side="left")
+
+        self.lbl_adb_env = ctk.CTkLabel(env_card, text="Detecting platform-tools environment...", font=ctk.CTkFont(family="Consolas", size=11), text_color="#E2E8F0", justify="left")
+        self.lbl_adb_env.pack(anchor="w", padx=16, pady=(0, 10))
+
+        env_btn_box = ctk.CTkFrame(env_card, fg_color="transparent")
+        env_btn_box.pack(fill="x", padx=16, pady=(0, 12))
+
+        ctk.CTkButton(
+            env_btn_box,
+            text="📥 Auto-Install / Update Platform-Tools",
+            height=30,
+            corner_radius=6,
+            fg_color=self.COLOR_GREEN,
+            hover_color="#059669",
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            command=self._action_install_adb
+        ).pack(side="left", padx=(0, 8))
+
+        ctk.CTkButton(
+            env_btn_box,
+            text="🌐 Register ADB in Windows PATH",
+            height=30,
+            corner_radius=6,
+            fg_color="#283042",
+            hover_color="#3B4660",
+            font=ctk.CTkFont(family="Segoe UI", size=11),
+            command=self._action_register_adb_path
+        ).pack(side="left", padx=(0, 8))
+
+        ctk.CTkButton(
+            env_btn_box,
+            text="📂 Open Tools Folder",
+            height=30,
+            corner_radius=6,
+            fg_color="#1E293B",
+            hover_color="#334155",
+            font=ctk.CTkFont(family="Segoe UI", size=11),
+            command=self._action_open_tools_folder
+        ).pack(side="left")
+
         log_card = ctk.CTkFrame(page, corner_radius=12, fg_color=self.COLOR_CARD, border_width=1, border_color=self.COLOR_CARD_BORDER)
-        log_card.grid(row=3, column=0, sticky="nsew")
-        page.grid_rowconfigure(3, weight=1)
+        log_card.grid(row=4, column=0, sticky="nsew")
+        page.grid_rowconfigure(4, weight=1)
 
         log_head = ctk.CTkFrame(log_card, fg_color="transparent")
         log_head.pack(fill="x", padx=16, pady=(10, 4))
@@ -1248,6 +1307,40 @@ class MainWindow(ctk.CTk):
 
     def _update_ui_device_status(self, info):
         self.device_info = info
+
+        # Check platform tools availability
+        if not self.adb.is_available():
+            self.lbl_status_badge.configure(text="ADB MISSING", fg_color=self.COLOR_AMBER, text_color="#000000")
+            self.lbl_device_title.configure(text="ADB Not Detected")
+            self.lbl_device_details.configure(text="Click below to auto-install")
+            self.lbl_specs.configure(text="ADB is missing. Please click 'Auto-Install ADB & Fastboot' below.")
+            try:
+                self.btn_sidebar_install_adb.pack(fill="x", padx=12, pady=(0, 6), before=self.btn_wireless)
+            except Exception:
+                self.btn_sidebar_install_adb.pack(fill="x", padx=12, pady=(0, 6))
+        else:
+            try:
+                self.btn_sidebar_install_adb.pack_forget()
+            except Exception:
+                pass
+
+        if hasattr(self, "lbl_adb_env"):
+            tool_info = self.adb.get_tool_info()
+            if tool_info["installed"]:
+                self.lbl_adb_env.configure(
+                    text=f"Status   : Installed & Verified (Version: {tool_info['version']})\n"
+                         f"ADB      : {tool_info['adb_path']}\n"
+                         f"Fastboot : {tool_info['fastboot_path']}"
+                )
+            else:
+                self.lbl_adb_env.configure(
+                    text="Status   : Missing ADB & Fastboot executables\n"
+                         "Action   : Click 'Auto-Install Platform-Tools' below to auto-download official Google binaries."
+                )
+
+        if not self.adb.is_available():
+            return
+
         if info["connected"]:
             if info["mode"] == "adb":
                 root_status = "Rooted" if info["rooted"] else "Unrooted"
@@ -1808,3 +1901,113 @@ class MainWindow(ctk.CTk):
 
         if show_dialog:
             messagebox.showinfo("Settings Queried", f"Current Device Values:\nTimeout: {s.get('screen_off_timeout')}ms\nFont: {s.get('font_scale')}\nDensity: {s.get('density')}")
+
+    # =========================================================================
+    # ACTIONS: ADB & PLATFORM TOOLS MANAGEMENT
+    # =========================================================================
+    def _action_install_adb(self):
+        """Opens a progress dialog and auto-downloads official Google Android Platform-Tools."""
+        modal = ctk.CTkToplevel(self)
+        modal.title("Android SDK Platform-Tools Installer")
+        modal.geometry("520x260")
+        modal.resizable(False, False)
+        modal.transient(self)
+        modal.grab_set()
+
+        try:
+            x = self.winfo_x() + (self.winfo_width() - 520) // 2
+            y = self.winfo_y() + (self.winfo_height() - 260) // 2
+            modal.geometry(f"+{x}+{y}")
+        except Exception:
+            pass
+
+        ctk.CTkLabel(
+            modal,
+            text="Android SDK Platform-Tools Installer",
+            font=ctk.CTkFont(family="Segoe UI", size=16, weight="bold"),
+            text_color="#FFFFFF"
+        ).pack(anchor="w", padx=20, pady=(16, 4))
+
+        ctk.CTkLabel(
+            modal,
+            text="Official Google Binaries: adb.exe, fastboot.exe, AdbWinApi.dll",
+            font=ctk.CTkFont(family="Segoe UI", size=11),
+            text_color=self.COLOR_TEXT_MUTED
+        ).pack(anchor="w", padx=20, pady=(0, 14))
+
+        lbl_status = ctk.CTkLabel(
+            modal,
+            text="Connecting to dl.google.com...",
+            font=ctk.CTkFont(family="Consolas", size=11),
+            text_color=self.COLOR_CYAN,
+            justify="left"
+        )
+        lbl_status.pack(anchor="w", padx=20, pady=(0, 8))
+
+        progress_bar = ctk.CTkProgressBar(modal, height=12, corner_radius=6, progress_color=self.COLOR_GREEN)
+        progress_bar.set(0.0)
+        progress_bar.pack(fill="x", padx=20, pady=(0, 16))
+
+        btn_box = ctk.CTkFrame(modal, fg_color="transparent")
+        btn_box.pack(fill="x", padx=20, pady=(0, 16))
+
+        btn_close = ctk.CTkButton(
+            btn_box,
+            text="Cancel",
+            width=100,
+            height=32,
+            corner_radius=6,
+            fg_color="#283042",
+            hover_color="#3B4660",
+            command=modal.destroy
+        )
+        btn_close.pack(side="right")
+
+        def _worker():
+            def _prog(percent, msg):
+                def _ui():
+                    progress_bar.set(percent / 100.0)
+                    lbl_status.configure(text=f"{msg} ({percent:.1f}%)")
+                self.dispatch(_ui)
+
+            ok, ver = self.adb.install_tools(progress_callback=_prog)
+            def _finish():
+                if ok:
+                    progress_bar.set(1.0)
+                    lbl_status.configure(text=f"Installed & verified successfully! ({ver})")
+                    btn_close.configure(text="Done", fg_color=self.COLOR_GREEN, hover_color="#059669")
+                    self.append_log(f"Platform-tools installed successfully: {ver}")
+                    self.refresh_device_status_async()
+                    messagebox.showinfo("ADB Installed", f"Android SDK Platform-Tools successfully installed!\nVersion: {ver}\nLocation: {self.adb.adb_bin}")
+                else:
+                    lbl_status.configure(text="Download or extraction failed. Check connection.")
+                    btn_close.configure(text="Close")
+                    messagebox.showerror("Installation Failed", "Could not download or install Google Platform-Tools. Check your network or firewall.")
+            self.dispatch(_finish)
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _action_register_adb_path(self):
+        """Registers the current ADB directory into the Windows User PATH environment variable."""
+        from core.adb_installer import add_directory_to_user_path
+        adb_dir = os.path.dirname(self.adb.adb_bin)
+        if not os.path.isdir(adb_dir):
+            messagebox.showwarning("Register PATH", "No valid platform-tools directory found. Please run Auto-Install first.")
+            return
+        ok = add_directory_to_user_path(adb_dir)
+        if ok:
+            messagebox.showinfo("PATH Updated", f"Successfully registered in Windows User PATH:\n{adb_dir}\n\nA broadcast notification has been sent to running applications.")
+            self.append_log(f"Registered {adb_dir} in User PATH")
+        else:
+            messagebox.showerror("PATH Update Failed", "Failed to write to User PATH registry (HKCU\\Environment\\Path).")
+
+    def _action_open_tools_folder(self):
+        """Opens Windows Explorer at the platform-tools directory."""
+        adb_dir = os.path.dirname(self.adb.adb_bin)
+        if os.path.isdir(adb_dir):
+            try:
+                os.startfile(adb_dir)
+            except Exception as e:
+                messagebox.showerror("Folder Error", f"Could not open directory: {e}")
+        else:
+            messagebox.showwarning("Tools Folder", "Platform-tools folder does not exist yet. Please run Auto-Install first.")

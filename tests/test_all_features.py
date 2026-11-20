@@ -155,5 +155,64 @@ class TestScrcpyManager(unittest.TestCase):
         self.scrcpy.stop()
         self.assertFalse(self.scrcpy.is_running())
 
+class TestADBInstaller(unittest.TestCase):
+    def test_find_platform_tools(self):
+        from core.adb_installer import find_existing_platform_tools, get_platform_tools_url, get_default_install_dir
+        info = find_existing_platform_tools()
+        self.assertIn("installed", info)
+        self.assertIn("adb", info)
+        self.assertIn("fastboot", info)
+        self.assertIn("version", info)
+        self.assertTrue(info["installed"])
+
+        url = get_platform_tools_url()
+        self.assertTrue(url.startswith("https://dl.google.com/android/repository/platform-tools-latest-"))
+
+        default_dir = get_default_install_dir()
+        self.assertTrue(os.path.isabs(default_dir))
+        self.assertTrue(default_dir.endswith("platform-tools"))
+
+    def test_adb_manager_availability(self):
+        adb = ADBManager()
+        self.assertTrue(adb.is_available())
+        tool_info = adb.get_tool_info()
+        self.assertTrue(tool_info["installed"])
+        self.assertIsNotNone(tool_info["adb_path"])
+
+    def test_gui_device_status_update_and_adb_fallback(self):
+        from gui.main_window import MainWindow
+        adb = ADBManager()
+        ops = DeviceOps(adb)
+        scrcpy = ScrcpyManager(log_callback=adb.log)
+        app = MainWindow(adb, ops, scrcpy)
+        
+        def is_packed(widget):
+            try:
+                return bool(widget.pack_info())
+            except Exception:
+                return False
+
+        try:
+            # 1. Normal connected status
+            info = {
+                "connected": True, "mode": "adb", "rooted": True,
+                "model": "C69HD", "manufacturer": "ONYX", "device": "c69hd",
+                "display_id": "1.0.0", "android_version": "11", "boot_slot": "_a",
+                "unlocked": True, "battery_level": "95%", "battery_charging": "No"
+            }
+            app._update_ui_device_status(info)
+            self.assertIn("CONNECTED", app.lbl_status_badge.cget("text"))
+            self.assertFalse(is_packed(app.btn_sidebar_install_adb))
+
+            # 2. Simulated missing ADB status
+            with patch.object(adb, "is_available", return_value=False):
+                with patch.object(adb, "get_tool_info", return_value={"installed": False, "adb_path": None, "fastboot_path": None, "version": None}):
+                    app._update_ui_device_status({"connected": False, "mode": "disconnected"})
+                    self.assertEqual(app.lbl_status_badge.cget("text"), "ADB MISSING")
+                    self.assertEqual(app.lbl_device_title.cget("text"), "ADB Not Detected")
+                    self.assertTrue(is_packed(app.btn_sidebar_install_adb))
+        finally:
+            app.destroy()
+
 if __name__ == "__main__":
     unittest.main()

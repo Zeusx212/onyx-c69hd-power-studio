@@ -23,7 +23,13 @@ The **C69HD** (`C69_M_STAR`) has unique hardware characteristics:
 - **📖 Distraction-Free Reading**: Relaxed 10-minute timeout, optimized 1.05 font scale, quiet background environment.
 - **🔄 Factory Default Revert**: Restores all stock packages, button mappings, and default settings.
 
-### 2. 📱 Scrcpy Screen Mirroring (Hardware-Accelerated Window)
+### 2. 🛠️ Automated ADB & Fastboot Detection & 1-Click Installer
+- **Intelligent Environment Detection**: Scans system PATH, Windows user registry (`HKCU\Environment\Path`), Android SDK directories, WinGet packages, and local project folders for existing Platform-Tools installations.
+- **In-App 1-Click Auto-Installer**: If ADB or Fastboot is missing, an alert badge appears in the sidebar and hardware logs page. Clicking the button downloads official Google Platform-Tools directly from `https://dl.google.com/android/repository/platform-tools-latest-windows.zip`, unpacks binaries, and verifies `adb.exe version` in real-time.
+- **Windows User PATH Registration**: 1-click registration of `platform-tools/` in Windows User Environment variables with instant `WM_SETTINGCHANGE` broadcast notification.
+- **Standalone CLI & Batch Installer**: Includes `install_adb.py` and `install_adb.bat` for standalone setup or setup on headless/clean workstations.
+
+### 3. 📱 Scrcpy Screen Mirroring (Hardware-Accelerated Window)
 - **Native Direct3D11 Window**: Launches a native Scrcpy window with high-performance Direct3D11 rendering, crisp text, and zero UI latency.
 - **E-Ink Specific Presets**:
   - FPS limiter (15 FPS recommended for Carta E-Ink stability, low CPU, and cool device operation).
@@ -36,17 +42,17 @@ The **C69HD** (`C69_M_STAR`) has unique hardware characteristics:
   - E-Ink controls: Full-screen refresh to clear ghosting and A2 speed mode toggle.
   - Live cheat-sheet of Scrcpy keyboard shortcuts and instant drag-and-drop APK installation.
 
-### 3. 📶 1-Click Wireless ADB (Cable-Free Mode)
+### 4. 📶 1-Click Wireless ADB (Cable-Free Mode)
 - Automatically detects the device's local Wi-Fi IP (e.g. `192.168.1.11`).
 - Switches ADB to port 5555 and connects wirelessly with a single click in the sidebar.
 - Disconnect and switch back to USB cable at any time.
 
-### 4. 📚 Book & Comic Transfer Hub
+### 5. 📚 Book & Comic Transfer Hub
 - Drag & drop or browse `.epub`, `.pdf`, `.mobi`, `.azw3`, `.cbz`, `.cbr`, and `.txt` files.
 - Select target destination (`/sdcard/Books/`, `/sdcard/Books/Manga/`, etc.).
 - Automatically sends Android `MEDIA_SCANNER_SCAN_FILE` broadcasts so new books appear on your Onyx Bookshelf immediately without needing a reboot or reconnect.
 
-### 5. 📦 E-Ink App Sideload Hub
+### 6. 📦 E-Ink App Sideload Hub
 - **Local APK Sideload**: Install any `.apk` with replacement permissions.
 - **Curated 1-Click E-Ink Catalog**: Automatic download and install of official releases:
   - **KOReader**: The premier open-source E-Ink e-reader engine.
@@ -57,12 +63,12 @@ The **C69HD** (`C69_M_STAR`) has unique hardware characteristics:
   - **F-Droid**: Open-source app store.
   - **Taskbar**: Floating app drawer and multitasking switcher.
 
-### 6. ⚡ E-Ink Remote & Screenshot Snip
+### 7. ⚡ E-Ink Remote & Screenshot Snip
 - **Live Screenshot Tool**: Captures clean 758 × 1024 screenshots over ADB, with live thumbnail display, "Save as PNG", and "Copy to Windows Clipboard".
 - **E-Ink Refresh Controls**: Remote full-screen e-ink refresh (`onyx.action.refresh_screen`) to clear ghosting, plus A2 speed mode toggle.
 - **Virtual Navigation Keys**: Back, Home, Recent Apps, Volume Up/Down, and Lock/Sleep.
 
-### 7. 🎨 Screensavers & Boot Animation
+### 8. 🎨 Screensavers & Boot Animation
 - **Screensaver Studio**: Auto-crops and scales any image to native Carta 758 × 1024 resolution with E-Ink high-contrast grayscale.
   - Target choices: User Gallery (`/sdcard/Pictures/Screensaver/`), System Standby (`standby-1.png`), or Shutdown Screen (`shutdown-default.png`).
   - Action buttons: "Open Wallpaper Settings on Device" and "Test Sleep Screen".
@@ -71,24 +77,24 @@ The **C69HD** (`C69_M_STAR`) has unique hardware characteristics:
   - **Live Preview on Device**: Plays the boot animation live on the physical e-reader screen without needing a reboot!
   - 1-Click Restore stock Onyx animation.
 
-### 8. 🛡️ Root & Partitions
+### 9. 🛡️ Root & Partitions
 - **Stock Partition Backup**: Single or full dump of `boot`, `dtbo`, `recovery`, `vbmeta`, `vbmeta_system`, and `persist`.
 - **Magisk Root Workflow**: Install Magisk APK -> Reboot Fastboot -> Flash Patched Boot -> Restore Stock.
 - **Hardware Button Wake**: Install `c69hd-wake.zip` Magisk module to allow physical center and side keys to wake the device from sleep.
 
-### 9. 🔘 Hardware Button Remapper
+### 10. 🔘 Hardware Button Remapper
 - Remap front button (`KEYCODE_BACK`):
   - **Long-Press**: Recent Apps / App Switcher (Recommended), Full Refresh, Screenshot, Refresh Mode Dialog, Home, Toggle A2, Factory Default.
   - **Short-Press**: Standard Back Key, Recent Apps, Full Refresh, Screenshot, Home.
 - Automatically writes to `settings put global KEYCODE_BACK`, configures `key_custom_side_key_short_press_enable`, and broadcasts `onyx.action.refresh_keymapping`.
 
-### 10. 🧹 Reversible System Debloater
+### 11. 🧹 Reversible System Debloater
 - Real-time search filter.
 - Safe 1-Click Debloat: Disables Snapdragon Voice Activation, dual-SIM daemons, SIM GBA, IWLAN, XR service, and cell broadcast alerts.
 - High RAM Consumers: Google Play Services & GSF toggle.
 - 100% reversible via `pm disable-user --user 0`.
 
-### 11. ⚙️ Device Settings & Power Tweaks
+### 12. ⚙️ Device Settings & Power Tweaks
 - Screen timeout bug fix with 1-click **"Fix to 5 Minutes"**.
 - Telemetry, Bluetooth LE, and Wi-Fi scanning toggles.
 - Location mode toggle.
@@ -103,12 +109,13 @@ Run the automated test suite across all modules:
 python -m unittest discover -s tests -p "test_*.py"
 ```
 Covers:
+- Automated ADB and Fastboot detection & installer verification
+- Scrcpy standalone execution and Direct3D11 flags
 - ADB manager parsing and device info probes
 - Partition dump definitions and safety validations
 - Screensaver 758x1024 high-contrast grayscale conversion
 - Boot animation `desc.txt` and uncompressed ZIP format checks
 - Button remapping JSON payloads and broadcast commands
-- Scrcpy flag assembly and path verification
 - Curated app store catalogue and debloat package definitions
 
 ---
@@ -119,7 +126,7 @@ Covers:
 - Windows 10/11 (or macOS/Linux)
 - Python 3.8+
 - Dependencies: `pip install customtkinter Pillow`
-- ADB and Fastboot in system PATH
+- **ADB & Fastboot**: Auto-detected or auto-installed directly inside the application (or via `install_adb.bat`).
 - USB Debugging enabled on your Onyx Boox C69HD
 
 ### Launching the Application
