@@ -1,16 +1,13 @@
-## Onyx Boox C69HD (Faust 5 OEM) Power Studio v1.0.0
+### What is New in v1.1.0:
+- **Physical Side Button Remapper**: Full hardware-level key remapping for physical side page-turn buttons (`gpio-keys`: Key 104 and Key 109). Includes presets for Volume Keys (Kindle, Moon+ Reader, KOReader, Tachiyomi page turns), Default Page Turn, Inverted Left-Hand Mode, D-Pad Navigation, Reader + Back, and custom keycodes, plus Onyx OS long-press actions (`fullRefreshScreen`, `screenshot`, `toggleA2`, `showRefreshModeDialog`, etc.) with zero-risk Magisk systemless persistence.
+- **Ported to Linux & macOS**:
+  - Native POSIX launchers: `./run_gui.sh` and `./install_adb.sh`.
+  - Native standalone build scripts: `build_linux.sh` and `build_mac.sh`.
+  - Cross-platform screenshot clipboard helper (AppleScript pasteboard on macOS, `wl-copy`/`xclip` on Linux).
+  - Cross-platform ADB and Scrcpy detection & auto-installation (Homebrew, APT, DNF, Pacman, Google SDK).
+- **Automated Multi-Platform CI/CD**: GitHub Actions workflow (`.github/workflows/build.yml`) compiling and releasing native Windows, Linux, and macOS standalone binaries on tag push.
 
-A modern desktop application designed specifically for customizing, debloating, and controlling the **Onyx Boox C69HD** (Faust 5 OEM, Qualcomm Snapdragon 662 `bengal`, Carta 758 × 1024 E-Ink).
-
-### Key Features
-- **1-Click Profile Presets**: Extreme Battery Life, Free RAM Booster (+320MB RAM), Distraction-Free Reading, and Factory Revert.
-- **Scrcpy Screen Mirroring**: High-performance Direct3D11 standalone window with Carta E-Ink 15 FPS limiter, screen-off power saving, and remote navigation controls.
-- **In-App ADB Auto-Detection & Installer**: Automatically detects existing platform-tools or downloads official Google Platform-Tools with 1-click Windows User PATH registration. Also includes standalone `install_adb.py` and `install_adb.bat`.
-- **E-Ink Screensaver & Boot Animation Studio**: Custom Carta 758 × 1024 high-contrast grayscale processor, lockscreens, and live on-device boot animation preview without rebooting.
-- **Hardware Button Remapping**: Rebind front center button long-press (Recent Apps / App Switcher, Full Refresh, Dialog) and short-press with instant broadcast updates.
-- **1-Click Wireless ADB**: Auto-detects device Wi-Fi IP and switches between USB and cable-free mode seamlessly.
-- **Book & Comic Transfer Hub**: Multi-file transfer (`.epub`, `.pdf`, `.cbz`, `.mobi`) with immediate Android MediaScanner broadcast indexing.
-- **Curated E-Ink App Sideloading**: 1-click install for KOReader, Mihon, EinkBro, Komi Store, Olauncher, Librera Reader, Simple Keyboard, Key Mapper, LocalSend, and F-Droid.
-- **Reversible Debloater**: Searchable debloat manager to disable battery-draining Qualcomm voice activation daemons, cellular services, and Google background services.
-- **Device Settings & Power Tweaks**: Resolves the factory infinite screen timeout bug (sets to 5 min), tweaks font scale, DPI density, and background telemetry.
-- **Root & Partition Tools**: Safe raw block backups for `boot`, `dtbo`, `recovery`, `vbmeta`, and Magisk installation support.
+### Download Packages:
+- **Windows (x64)**: [Onyx_C69HD_Power_Studio_win_x64.zip](https://github.com/Zeusx212/onyx-c69hd-power-studio/releases/download/v1.1.0/Onyx_C69HD_Power_Studio_win_x64.zip)
+- **Linux (x64)**: [Onyx_C69HD_Power_Studio_linux_x64.tar.gz](https://github.com/Zeusx212/onyx-c69hd-power-studio/releases/download/v1.1.0/Onyx_C69HD_Power_Studio_linux_x64.tar.gz)
+- **macOS**: [Onyx_C69HD_Power_Studio_macOS.zip](https://github.com/Zeusx212/onyx-c69hd-power-studio/releases/download/v1.1.0/Onyx_C69HD_Power_Studio_macOS.zip)
