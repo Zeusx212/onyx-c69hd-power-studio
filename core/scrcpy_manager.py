@@ -1,7 +1,7 @@
 """
 Scrcpy integration manager for Onyx Boox C69HD.
-Supports both native embedded mirroring (inside a GUI frame) and standalone window mode,
-with E-Ink performance profiles (low FPS, screen-off while controlling, recording).
+Launches and manages native hardware-accelerated screen mirroring with E-Ink performance profiles
+(15 FPS, screen-off while controlling, keep-awake, MP4 recording).
 """
 
 import subprocess
@@ -11,18 +11,6 @@ import time
 import os
 import glob
 import collections
-import ctypes
-from ctypes import c_void_p, c_int, c_long
-
-user32 = ctypes.windll.user32 if os.name == 'nt' else None
-if user32:
-    try:
-        user32.SetParent.argtypes = [c_void_p, c_void_p]
-        user32.SetParent.restype = c_void_p
-        user32.SetWindowPos.argtypes = [c_void_p, c_void_p, c_int, c_int, c_int, c_int, c_int]
-        user32.SetWindowPos.restype = c_int
-    except Exception:
-        pass
 
 class ScrcpyManager:
     @staticmethod
@@ -65,8 +53,6 @@ class ScrcpyManager:
         self.log_callback = log_callback
         self.scrcpy_bin = self.locate_scrcpy_executable()
         self.process = None
-        self.embedded_hwnd = None
-        self.container_hwnd = None
         self.on_stop_callback = None
         self.recent_logs = collections.deque(maxlen=30)
         self._lock = threading.Lock()
@@ -97,21 +83,11 @@ class ScrcpyManager:
 
     def stop(self):
         proc = None
-        h = None
         self._user_stopped = True
         with self._lock:
             if self.process is not None and self.process.poll() is None:
                 proc = self.process
-            h = self.embedded_hwnd
             self.process = None
-            self.embedded_hwnd = None
-
-        if h and user32:
-            try:
-                user32.ShowWindow(h, 0)
-                user32.SetParent(h, 0)
-            except Exception:
-                pass
 
         if proc:
             self.log("Stopping scrcpy process...")
@@ -130,7 +106,7 @@ class ScrcpyManager:
                         pass
             threading.Thread(target=_stop_worker, args=(proc,), daemon=True).start()
 
-    def start(self, container_hwnd=None, options=None, on_stop=None):
+    def start(self, options=None, on_stop=None):
         if self.is_running():
             self.stop()
 
@@ -140,7 +116,7 @@ class ScrcpyManager:
         if not self.is_available():
             self.scrcpy_bin = self.locate_scrcpy_executable()
             if not self.is_available():
-                return False, f"scrcpy executable not found. Please install scrcpy or add it to PATH."
+                return False, "scrcpy executable not found. Please install scrcpy or add it to PATH."
 
         self.on_stop_callback = on_stop
         if not options:
@@ -155,10 +131,6 @@ class ScrcpyManager:
         always_on_top = options.get("always_on_top", False)
         read_only = options.get("read_only", False)
         record_file = options.get("record_file", None)
-        embedded = options.get("embedded", True) and (container_hwnd is not None) and (os.name == 'nt')
-
-        timestamp = int(time.time() * 1000)
-        window_title = f"Onyx_C69HD_Mirror_{timestamp}" if embedded else "Onyx Boox C69HD Screen Mirror"
 
         cmd = [self.scrcpy_bin]
 
@@ -178,16 +150,14 @@ class ScrcpyManager:
             cmd.append("--turn-screen-off")
         if stay_awake:
             cmd.append("--stay-awake")
-        if always_on_top and not embedded:
+        if always_on_top:
             cmd.append("--always-on-top")
         if read_only:
             cmd.append("--no-control")
         if record_file:
             cmd.append(f"--record={record_file}")
 
-        cmd.append(f"--window-title={window_title}")
-        if embedded:
-            cmd.append("--window-borderless")
+        cmd.append("--window-title=Onyx Boox C69HD Screen Mirror")
 
         self.log(f"Starting command: {' '.join(cmd)}")
         self.recent_logs.clear()
@@ -210,13 +180,9 @@ class ScrcpyManager:
         # Start continuous output streaming thread
         threading.Thread(target=self._stream_reader_worker, args=(proc,), daemon=True).start()
 
-        if embedded and user32:
-            self.container_hwnd = container_hwnd
-            threading.Thread(target=self._embed_worker, args=(window_title, container_hwnd, proc), daemon=True).start()
-
         # Start process monitor thread
         threading.Thread(target=self._process_monitor_worker, args=(proc,), daemon=True).start()
-        return True, "Scrcpy mirror started successfully."
+        return True, "Scrcpy mirror window launched successfully."
 
     def _stream_reader_worker(self, proc):
         """Continuously reads scrcpy stdout/stderr to prevent pipe buffer deadlocks."""
@@ -228,62 +194,6 @@ class ScrcpyManager:
                         self.log(clean)
         except Exception:
             pass
-
-    def _embed_worker(self, target_title, c_hwnd, proc):
-        found = []
-        def enum_cb(h, lp):
-            length = user32.GetWindowTextLengthW(h)
-            if length > 0:
-                buff = ctypes.create_unicode_buffer(length + 1)
-                user32.GetWindowTextW(h, buff, length + 1)
-                if buff.value == target_title:
-                    found.append(h)
-                    return False
-            return True
-
-        WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_int, ctypes.c_int)
-        for _ in range(50):  # poll up to 5 seconds
-            with self._lock:
-                if self.process is not proc or proc.poll() is not None:
-                    return
-            time.sleep(0.1)
-            try:
-                user32.EnumWindows(WNDENUMPROC(enum_cb), 0)
-            except Exception:
-                pass
-            if found:
-                break
-
-        if found:
-            h = found[0]
-            with self._lock:
-                if self.process is not proc:
-                    return
-                self.embedded_hwnd = h
-
-            try:
-                self.log(f"Found scrcpy window HWND: {h}. Reparenting into container {c_hwnd}...")
-                user32.SetParent(h, c_hwnd)
-
-                rect = (ctypes.c_long * 4)()
-                user32.GetClientRect(c_hwnd, rect)
-                w = max(rect[2] - rect[0], 100)
-                h_dim = max(rect[3] - rect[1], 100)
-                SWP_SHOWWINDOW = 0x0040
-                user32.SetWindowPos(h, 0, 0, 0, w, h_dim, SWP_SHOWWINDOW)
-                self.log("Scrcpy successfully embedded into GUI window!")
-            except Exception as e:
-                self.log(f"Error reparenting scrcpy window: {e}")
-
-    def resize_embedded(self, width, height):
-        with self._lock:
-            h = self.embedded_hwnd
-        if h and user32 and width > 50 and height > 50:
-            try:
-                SWP_NOZORDER = 0x0004
-                user32.SetWindowPos(h, 0, 0, 0, width, height, SWP_NOZORDER)
-            except Exception:
-                pass
 
     def _process_monitor_worker(self, proc):
         # Wait for this specific process to terminate
@@ -298,7 +208,6 @@ class ScrcpyManager:
         with self._lock:
             if self.process is proc:
                 self.process = None
-                self.embedded_hwnd = None
 
         error_msg = None
         if not self._user_stopped and exit_code not in (0, None):

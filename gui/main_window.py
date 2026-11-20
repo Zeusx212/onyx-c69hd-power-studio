@@ -264,31 +264,34 @@ class MainWindow(ctk.CTk):
     # PAGE: LIVE SCREEN MIRROR (SCRCPY INTEGRATION)
     # =========================================================================
     def _create_page_mirror(self):
-        page = ctk.CTkFrame(self.content_container, fg_color="transparent")
-        page.grid_rowconfigure(2, weight=1)
-        page.grid_columnconfigure(0, weight=1)
+        page = ctk.CTkScrollableFrame(self.content_container, fg_color="transparent")
 
         # Header Title
         lbl_h = ctk.CTkLabel(page, text="Live Screen Mirror (Scrcpy)", font=ctk.CTkFont(family="Segoe UI", size=22, weight="bold"), text_color="#FFFFFF")
-        lbl_h.grid(row=0, column=0, sticky="w", pady=(0, 4))
-        lbl_sub = ctk.CTkLabel(page, text="Hardware-accelerated Direct3D11 mirroring with embedded in-app display and E-Ink battery optimization.", font=ctk.CTkFont(family="Segoe UI", size=12), text_color=self.COLOR_TEXT_MUTED)
-        lbl_sub.grid(row=1, column=0, sticky="w", pady=(0, 12))
+        lbl_h.pack(anchor="w", pady=(0, 4))
+        lbl_sub = ctk.CTkLabel(page, text="Hardware-accelerated Direct3D11 screen mirror with E-Ink optimizations, keyboard & mouse controls, and instant APK drag-and-drop.", font=ctk.CTkFont(family="Segoe UI", size=12), text_color=self.COLOR_TEXT_MUTED)
+        lbl_sub.pack(anchor="w", pady=(0, 16))
 
-        # Main Split: Left Controls + Right Embedded Viewer
+        # Two-column container
         split = ctk.CTkFrame(page, fg_color="transparent")
-        split.grid(row=2, column=0, sticky="nsew")
-        split.grid_rowconfigure(0, weight=1)
+        split.pack(fill="both", expand=True)
+        split.grid_columnconfigure(0, weight=1)
         split.grid_columnconfigure(1, weight=1)
 
-        # Left Column: Scrcpy Controls Card
-        ctrl_card = ctk.CTkScrollableFrame(split, corner_radius=12, fg_color=self.COLOR_CARD, border_width=1, border_color=self.COLOR_CARD_BORDER, width=340)
-        ctrl_card.grid(row=0, column=0, sticky="nsew", padx=(0, 14))
+        # -------------------------------------------------------------
+        # Left Card: Mirroring Controls & Stream Configuration
+        # -------------------------------------------------------------
+        ctrl_card = ctk.CTkFrame(split, corner_radius=12, fg_color=self.COLOR_CARD, border_width=1, border_color=self.COLOR_CARD_BORDER)
+        ctrl_card.grid(row=0, column=0, sticky="nsew", padx=(0, 10), pady=0)
 
-        ctk.CTkLabel(ctrl_card, text="Mirroring Session Controls", font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"), text_color=self.COLOR_CYAN).pack(anchor="w", padx=12, pady=(10, 4))
+        inner_ctrl = ctk.CTkFrame(ctrl_card, fg_color="transparent")
+        inner_ctrl.pack(fill="both", expand=True, padx=18, pady=16)
+
+        ctk.CTkLabel(inner_ctrl, text="Mirror Session Controls", font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"), text_color=self.COLOR_CYAN).pack(anchor="w")
 
         # Status Badge
         self.lbl_mirror_status = ctk.CTkLabel(
-            ctrl_card,
+            inner_ctrl,
             text="STATUS: IDLE",
             corner_radius=6,
             fg_color="#1E293B",
@@ -297,41 +300,41 @@ class MainWindow(ctk.CTk):
             padx=8,
             pady=4
         )
-        self.lbl_mirror_status.pack(anchor="w", padx=12, pady=(0, 6))
+        self.lbl_mirror_status.pack(anchor="w", pady=(8, 4))
 
         # Binary status
         bin_path = self.scrcpy.get_binary_path()
         bin_avail = self.scrcpy.is_available()
         bin_desc = f"scrcpy ({os.path.basename(bin_path)})" if bin_avail else "scrcpy not found"
         self.lbl_scrcpy_bin = ctk.CTkLabel(
-            ctrl_card,
+            inner_ctrl,
             text=f"Engine: {bin_desc}",
             font=ctk.CTkFont(family="Segoe UI", size=10),
             text_color=self.COLOR_GREEN if bin_avail else self.COLOR_RED
         )
-        self.lbl_scrcpy_bin.pack(anchor="w", padx=12, pady=(0, 10))
+        self.lbl_scrcpy_bin.pack(anchor="w", pady=(0, 10))
 
         if not bin_avail:
             self.btn_install_scrcpy = ctk.CTkButton(
-                ctrl_card,
+                inner_ctrl,
                 text="📥 Install Scrcpy (WinGet)",
-                height=28,
+                height=30,
                 corner_radius=6,
                 fg_color="#0284C7",
                 hover_color="#0369A1",
                 font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
                 command=self._action_install_scrcpy_winget
             )
-            self.btn_install_scrcpy.pack(anchor="w", padx=12, pady=(0, 10))
+            self.btn_install_scrcpy.pack(anchor="w", pady=(0, 12))
 
         # Start / Stop Buttons
-        btn_box = ctk.CTkFrame(ctrl_card, fg_color="transparent")
-        btn_box.pack(fill="x", padx=12, pady=(0, 14))
+        btn_box = ctk.CTkFrame(inner_ctrl, fg_color="transparent")
+        btn_box.pack(fill="x", pady=(0, 14))
 
         self.btn_start_mirror = ctk.CTkButton(
             btn_box,
-            text="▶ Start Mirror",
-            height=36,
+            text="▶ Launch Mirror Window",
+            height=38,
             corner_radius=8,
             fg_color=self.COLOR_GREEN,
             hover_color="#059669",
@@ -343,7 +346,7 @@ class MainWindow(ctk.CTk):
         self.btn_stop_mirror = ctk.CTkButton(
             btn_box,
             text="⏹ Stop",
-            height=36,
+            height=38,
             corner_radius=8,
             fg_color=self.COLOR_RED,
             hover_color="#DC2626",
@@ -353,97 +356,107 @@ class MainWindow(ctk.CTk):
         )
         self.btn_stop_mirror.pack(side="right", fill="x", expand=True)
 
-        # Mode Selection
-        ctk.CTkLabel(ctrl_card, text="Display Mode:", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold")).pack(anchor="w", padx=12, pady=(4, 2))
-        self.var_mirror_mode = ctk.StringVar(value="embedded")
-        mode_box = ctk.CTkFrame(ctrl_card, fg_color="transparent")
-        mode_box.pack(anchor="w", padx=12, pady=(0, 10))
-        ctk.CTkRadioButton(mode_box, text="Embedded In-App", variable=self.var_mirror_mode, value="embedded").pack(side="left", padx=(0, 10))
-        ctk.CTkRadioButton(mode_box, text="Pop-out Window", variable=self.var_mirror_mode, value="window").pack(side="left")
-
         # Quality Preset
-        ctk.CTkLabel(ctrl_card, text="Quality / Performance Profile:", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold")).pack(anchor="w", padx=12, pady=(4, 2))
+        ctk.CTkLabel(inner_ctrl, text="Quality / Performance Profile:", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold")).pack(anchor="w", pady=(4, 2))
         self.opt_mirror_profile = ctk.CTkOptionMenu(
-            ctrl_card,
+            inner_ctrl,
             height=32,
             corner_radius=8,
             values=[
-                "E-Ink Optimal (758px, 15 FPS, 2M)",
+                "E-Ink Optimal (758px, 15 FPS, 2M) [Recommended]",
                 "Crisp Reading (1024px, 20 FPS, 4M)",
                 "Full Speed (Native, 60 FPS, 8M)"
             ],
-            width=290
+            width=300
         )
-        self.opt_mirror_profile.set("E-Ink Optimal (758px, 15 FPS, 2M)")
-        self.opt_mirror_profile.pack(anchor="w", padx=12, pady=(0, 12))
+        self.opt_mirror_profile.set("E-Ink Optimal (758px, 15 FPS, 2M) [Recommended]")
+        self.opt_mirror_profile.pack(anchor="w", pady=(0, 12))
 
         # E-Ink Power Toggles
-        ctk.CTkLabel(ctrl_card, text="E-Ink Optimizations:", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold")).pack(anchor="w", padx=12, pady=(6, 4))
+        ctk.CTkLabel(inner_ctrl, text="E-Ink Optimizations:", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold")).pack(anchor="w", pady=(6, 4))
 
         self.sw_turn_screen_off = ctk.CTkSwitch(
-            ctrl_card,
-            text="Turn Device Screen OFF while mirroring\n(Saves e-ink battery, control from PC)",
+            inner_ctrl,
+            text="Turn Device Screen OFF while mirroring\n(Saves E-Ink battery, control 100% from PC)",
             font=ctk.CTkFont(family="Segoe UI", size=11)
         )
-        self.sw_turn_screen_off.pack(anchor="w", padx=12, pady=4)
+        self.sw_turn_screen_off.pack(anchor="w", pady=4)
 
-        self.sw_stay_awake = ctk.CTkSwitch(ctrl_card, text="Keep Device Awake (--stay-awake)", font=ctk.CTkFont(family="Segoe UI", size=11))
+        self.sw_stay_awake = ctk.CTkSwitch(inner_ctrl, text="Keep Device Awake (--stay-awake)", font=ctk.CTkFont(family="Segoe UI", size=11))
         self.sw_stay_awake.select()
-        self.sw_stay_awake.pack(anchor="w", padx=12, pady=4)
+        self.sw_stay_awake.pack(anchor="w", pady=4)
 
-        self.sw_mirror_ontop = ctk.CTkSwitch(ctrl_card, text="Always on Top (Pop-out mode)", font=ctk.CTkFont(family="Segoe UI", size=11))
-        self.sw_mirror_ontop.pack(anchor="w", padx=12, pady=4)
+        self.sw_mirror_ontop = ctk.CTkSwitch(inner_ctrl, text="Always on Top Window (--always-on-top)", font=ctk.CTkFont(family="Segoe UI", size=11))
+        self.sw_mirror_ontop.pack(anchor="w", pady=4)
 
-        self.sw_mirror_readonly = ctk.CTkSwitch(ctrl_card, text="Read-Only Mode (No mouse/clicks)", font=ctk.CTkFont(family="Segoe UI", size=11))
-        self.sw_mirror_readonly.pack(anchor="w", padx=12, pady=4)
+        self.sw_mirror_readonly = ctk.CTkSwitch(ctrl_card, text="Read-Only Mode (--no-control)", font=ctk.CTkFont(family="Segoe UI", size=11))
+        self.sw_mirror_readonly.pack(anchor="w", pady=4)
 
         # Record to MP4 row
-        rec_box = ctk.CTkFrame(ctrl_card, fg_color="transparent")
-        rec_box.pack(fill="x", padx=12, pady=(12, 6))
+        rec_box = ctk.CTkFrame(inner_ctrl, fg_color="transparent")
+        rec_box.pack(fill="x", pady=(12, 4))
         self.sw_record = ctk.CTkSwitch(rec_box, text="Record to MP4:", font=ctk.CTkFont(family="Segoe UI", size=11))
         self.sw_record.pack(side="left")
         ctk.CTkButton(rec_box, text="Choose Path...", width=95, height=26, corner_radius=6, fg_color="#283042", command=self._action_choose_record_path).pack(side="right")
 
-        self.lbl_record_path = ctk.CTkLabel(ctrl_card, text="No recording path set", font=ctk.CTkFont(family="Segoe UI", size=10), text_color=self.COLOR_TEXT_MUTED)
-        self.lbl_record_path.pack(anchor="w", padx=12, pady=(0, 10))
+        self.lbl_record_path = ctk.CTkLabel(inner_ctrl, text="No recording path set", font=ctk.CTkFont(family="Segoe UI", size=10), text_color=self.COLOR_TEXT_MUTED)
+        self.lbl_record_path.pack(anchor="w", pady=(0, 6))
 
-        # Quick Virtual Hardware Remote
-        ctk.CTkLabel(ctrl_card, text="Remote E-Ink Key Controls", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"), text_color=self.COLOR_CYAN).pack(anchor="w", padx=12, pady=(14, 6))
+        # -------------------------------------------------------------
+        # Right Card: Remote Key Controls & Keyboard Shortcuts Cheat-Sheet
+        # -------------------------------------------------------------
+        remote_card = ctk.CTkFrame(split, corner_radius=12, fg_color=self.COLOR_CARD, border_width=1, border_color=self.COLOR_CARD_BORDER)
+        remote_card.grid(row=0, column=1, sticky="nsew", padx=(10, 0), pady=0)
 
-        m_nav = ctk.CTkFrame(ctrl_card, fg_color="transparent")
-        m_nav.pack(fill="x", padx=8, pady=2)
-        ctk.CTkButton(m_nav, text="◀ Back", height=30, corner_radius=6, fg_color="#283042", command=lambda: self.ops.send_keyevent("KEYCODE_BACK")).grid(row=0, column=0, padx=2, pady=2, sticky="ew")
-        ctk.CTkButton(m_nav, text="⌂ Home", height=30, corner_radius=6, fg_color="#283042", command=lambda: self.ops.send_keyevent("KEYCODE_HOME")).grid(row=0, column=1, padx=2, pady=2, sticky="ew")
-        ctk.CTkButton(m_nav, text="☰ Overview", height=30, corner_radius=6, fg_color="#283042", command=lambda: self.ops.send_keyevent("KEYCODE_APP_SWITCH")).grid(row=0, column=2, padx=2, pady=2, sticky="ew")
-        m_nav.grid_columnconfigure(0, weight=1)
-        m_nav.grid_columnconfigure(1, weight=1)
-        m_nav.grid_columnconfigure(2, weight=1)
+        inner_rem = ctk.CTkFrame(remote_card, fg_color="transparent")
+        inner_rem.pack(fill="both", expand=True, padx=18, pady=16)
 
-        ctk.CTkButton(ctrl_card, text="🔄 Clear Ghosting (Full Refresh)", height=32, corner_radius=6, fg_color="#1E293B", command=self.ops.trigger_eink_refresh).pack(fill="x", padx=10, pady=(6, 12))
+        ctk.CTkLabel(inner_rem, text="Remote E-Ink Key Controls", font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"), text_color=self.COLOR_CYAN).pack(anchor="w")
+        ctk.CTkLabel(inner_rem, text="Send hardware keyevents and e-ink commands directly to device.", font=ctk.CTkFont(family="Segoe UI", size=11), text_color=self.COLOR_TEXT_MUTED).pack(anchor="w", pady=(2, 10))
 
-        # Right Column: Embedded Scrcpy Window Container
-        viewer_card = ctk.CTkFrame(split, corner_radius=12, fg_color="#0A0C12", border_width=1, border_color=self.COLOR_CARD_BORDER)
-        viewer_card.grid(row=0, column=1, sticky="nsew")
-        viewer_card.grid_rowconfigure(1, weight=1)
-        viewer_card.grid_columnconfigure(0, weight=1)
+        m_nav1 = ctk.CTkFrame(inner_rem, fg_color="transparent")
+        m_nav1.pack(fill="x", pady=2)
+        ctk.CTkButton(m_nav1, text="◀ Back", height=32, corner_radius=6, fg_color="#283042", command=lambda: self.ops.send_keyevent("KEYCODE_BACK")).grid(row=0, column=0, padx=2, pady=2, sticky="ew")
+        ctk.CTkButton(m_nav1, text="⌂ Home", height=32, corner_radius=6, fg_color="#283042", command=lambda: self.ops.send_keyevent("KEYCODE_HOME")).grid(row=0, column=1, padx=2, pady=2, sticky="ew")
+        ctk.CTkButton(m_nav1, text="☰ Overview", height=32, corner_radius=6, fg_color="#283042", command=lambda: self.ops.send_keyevent("KEYCODE_APP_SWITCH")).grid(row=0, column=2, padx=2, pady=2, sticky="ew")
+        m_nav1.grid_columnconfigure(0, weight=1)
+        m_nav1.grid_columnconfigure(1, weight=1)
+        m_nav1.grid_columnconfigure(2, weight=1)
 
-        v_head = ctk.CTkFrame(viewer_card, fg_color="transparent")
-        v_head.grid(row=0, column=0, sticky="ew", padx=16, pady=(10, 4))
-        ctk.CTkLabel(v_head, text="Display Viewport (758 × 1024 Carta E-Ink)", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"), text_color=self.COLOR_CYAN).pack(side="left")
+        m_nav2 = ctk.CTkFrame(inner_rem, fg_color="transparent")
+        m_nav2.pack(fill="x", pady=2)
+        ctk.CTkButton(m_nav2, text="🔊 Vol Up", height=30, corner_radius=6, fg_color="#1E293B", command=lambda: self.ops.send_keyevent("KEYCODE_VOLUME_UP")).grid(row=0, column=0, padx=2, pady=2, sticky="ew")
+        ctk.CTkButton(m_nav2, text="🔉 Vol Down", height=30, corner_radius=6, fg_color="#1E293B", command=lambda: self.ops.send_keyevent("KEYCODE_VOLUME_DOWN")).grid(row=0, column=1, padx=2, pady=2, sticky="ew")
+        ctk.CTkButton(m_nav2, text="🔒 Lock / Sleep", height=30, corner_radius=6, fg_color="#1E293B", command=lambda: self.ops.send_keyevent("KEYCODE_POWER")).grid(row=0, column=2, padx=2, pady=2, sticky="ew")
+        m_nav2.grid_columnconfigure(0, weight=1)
+        m_nav2.grid_columnconfigure(1, weight=1)
+        m_nav2.grid_columnconfigure(2, weight=1)
 
-        # Native container for scrcpy SetParent
-        self.scrcpy_container = tk.Frame(viewer_card, bg="#05070C", highlightthickness=0)
-        self.scrcpy_container.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 12))
-        self.scrcpy_container.bind("<Configure>", lambda e: self.scrcpy.resize_embedded(e.width, e.height))
+        ctk.CTkButton(inner_rem, text="🔄 Clear Ghosting (Full Screen Refresh)", height=34, corner_radius=6, fg_color=self.COLOR_BLUE, hover_color="#2563EB", command=self.ops.trigger_eink_refresh).pack(fill="x", pady=(10, 4))
+        ctk.CTkButton(inner_rem, text="⚡ Toggle A2 Speed Mode", height=30, corner_radius=6, fg_color="#1E293B", command=self.ops.toggle_a2_speed_mode).pack(fill="x", pady=(0, 14))
 
-        # Placeholder label when scrcpy is not running
-        self.lbl_container_placeholder = ctk.CTkLabel(
-            self.scrcpy_container,
-            text="Mirror Idle\n\nClick '▶ Start Mirror' to launch live screen streaming.\nSupports mouse clicks, touch swipes, keyboard typing, and drag-and-drop APK installs.",
-            font=ctk.CTkFont(family="Segoe UI", size=13),
-            text_color=self.COLOR_TEXT_MUTED
-        )
-        self.lbl_container_placeholder.place(relx=0.5, rely=0.5, anchor="center")
+        # Shortcuts Guide Box
+        ctk.CTkLabel(inner_rem, text="Scrcpy Window Keyboard Shortcuts", font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"), text_color="#FFFFFF").pack(anchor="w", pady=(6, 4))
+
+        shortcuts_box = ctk.CTkFrame(inner_rem, corner_radius=8, fg_color="#080A10", border_width=1, border_color=self.COLOR_CARD_BORDER)
+        shortcuts_box.pack(fill="x", pady=4)
+
+        shortcuts = [
+            ("Alt + o", "Turn device screen OFF (keeps PC mirror active)"),
+            ("Alt + Shift + o", "Turn device screen ON"),
+            ("Alt + p", "Power toggle (wake or sleep device)"),
+            ("Alt + r", "Rotate screen clockwise"),
+            ("Alt + f", "Toggle fullscreen mode"),
+            ("Alt + n", "Expand notification panel"),
+            ("Alt + v", "Paste PC clipboard to device"),
+            ("Drag & Drop", "Drop APK files into window to install")
+        ]
+
+        for key, desc in shortcuts:
+            row = ctk.CTkFrame(shortcuts_box, fg_color="transparent")
+            row.pack(fill="x", padx=10, pady=3)
+            ctk.CTkLabel(row, text=key, font=ctk.CTkFont(family="Consolas", size=11, weight="bold"), text_color=self.COLOR_CYAN, width=110, anchor="w").pack(side="left")
+            ctk.CTkLabel(row, text=desc, font=ctk.CTkFont(family="Segoe UI", size=10), text_color=self.COLOR_TEXT_MUTED, anchor="w").pack(side="left", fill="x", expand=True)
 
         return page
 
@@ -481,7 +494,6 @@ class MainWindow(ctk.CTk):
             )
             return
 
-        is_embedded = (self.var_mirror_mode.get() == "embedded")
         profile = self.opt_mirror_profile.get()
 
         max_size = "758"
@@ -507,24 +519,18 @@ class MainWindow(ctk.CTk):
             "always_on_top": bool(self.sw_mirror_ontop.get()),
             "read_only": bool(self.sw_mirror_readonly.get()),
             "record_file": self._record_video_path if self.sw_record.get() else None,
-            "embedded": is_embedded
         }
 
-        container_hwnd = self.scrcpy_container.winfo_id() if is_embedded else None
-
-        self.lbl_mirror_status.configure(text="STATUS: STARTING...", fg_color=self.COLOR_AMBER, text_color="#FFFFFF")
+        self.lbl_mirror_status.configure(text="STATUS: LAUNCHING...", fg_color=self.COLOR_AMBER, text_color="#FFFFFF")
         self.btn_start_mirror.configure(state="disabled")
 
         def _on_stop_cb(exit_code=0, error_msg=None):
             self.dispatch(self._handle_scrcpy_stopped, exit_code, error_msg)
 
-        ok, msg = self.scrcpy.start(container_hwnd=container_hwnd, options=options, on_stop=_on_stop_cb)
+        ok, msg = self.scrcpy.start(options=options, on_stop=_on_stop_cb)
         if ok:
-            mode_desc = "Embedded" if is_embedded else "Pop-out"
-            self.lbl_mirror_status.configure(text=f"STATUS: RUNNING ({mode_desc} • {max_size}px / {max_fps} FPS)", fg_color="#064E3B", text_color="#FFFFFF")
+            self.lbl_mirror_status.configure(text=f"STATUS: STREAMING ({max_size}px / {max_fps} FPS)", fg_color="#064E3B", text_color="#FFFFFF")
             self.btn_stop_mirror.configure(state="normal")
-            if is_embedded:
-                self.lbl_container_placeholder.place_forget()
         else:
             self.lbl_mirror_status.configure(text="STATUS: ERROR", fg_color=self.COLOR_RED, text_color="#FFFFFF")
             self.btn_start_mirror.configure(state="normal")
@@ -537,13 +543,24 @@ class MainWindow(ctk.CTk):
     def _handle_scrcpy_stopped(self, exit_code=0, error_msg=None):
         self.btn_start_mirror.configure(state="normal")
         self.btn_stop_mirror.configure(state="disabled")
-        self.lbl_container_placeholder.place(relx=0.5, rely=0.5, anchor="center")
         if exit_code not in (0, None):
             self.lbl_mirror_status.configure(text=f"STATUS: EXITED (Code {exit_code})", fg_color=self.COLOR_RED, text_color="#FFFFFF")
             if error_msg:
                 messagebox.showerror("Scrcpy Mirror Error", f"Scrcpy mirror stopped unexpectedly (exit code {exit_code}):\n\n{error_msg}")
         else:
             self.lbl_mirror_status.configure(text="STATUS: IDLE", fg_color="#1E293B", text_color=self.COLOR_TEXT_MUTED)
+
+    def _action_install_scrcpy_winget(self):
+        def _run():
+            self.append_log("Installing scrcpy via WinGet...")
+            res = subprocess.run(["winget", "install", "--id", "Genymobile.scrcpy", "--silent", "--accept-source-agreements", "--accept-package-agreements"], capture_output=True, text=True)
+            self.scrcpy.scrcpy_bin = self.scrcpy.locate_scrcpy_executable()
+            if self.scrcpy.is_available():
+                self.dispatch(lambda: messagebox.showinfo("Scrcpy Installed", "Scrcpy was installed successfully!"))
+                self.dispatch(lambda: self.lbl_scrcpy_bin.configure(text=f"Engine: scrcpy ({os.path.basename(self.scrcpy.get_binary_path())})", text_color=self.COLOR_GREEN))
+            else:
+                self.dispatch(lambda: messagebox.showerror("Install Failed", f"Could not install scrcpy automatically:\n{res.stderr or res.stdout}"))
+        threading.Thread(target=_run, daemon=True).start()
 
     def _action_install_scrcpy_winget(self):
         def _run():

@@ -23,16 +23,18 @@ The **C69HD** (`C69_M_STAR`) has unique hardware characteristics:
 - **📖 Distraction-Free Reading**: Relaxed 10-minute timeout, optimized 1.05 font scale, quiet background environment.
 - **🔄 Factory Default Revert**: Restores all stock packages, button mappings, and default settings.
 
-### 2. 📱 Scrcpy Screen Mirroring (Embedded & Standalone)
-- **Native Embedded Viewport**: Embeds live scrcpy rendering directly into the studio app window using Windows Win32 API (`SetParent`, `SetWindowPos`) with Direct3D11 hardware acceleration.
-- **Standalone Mirror Mode**: Launch scrcpy in an independent window if preferred.
+### 2. 📱 Scrcpy Screen Mirroring (Hardware-Accelerated Window)
+- **Native Direct3D11 Window**: Launches a native Scrcpy window with high-performance Direct3D11 rendering, crisp text, and zero UI latency.
 - **E-Ink Specific Presets**:
-  - FPS limiter (15 FPS recommended for E-Ink stability and lower CPU/battery drain).
-  - Turn device screen off while mirroring (`--turn-screen-off`).
+  - FPS limiter (15 FPS recommended for Carta E-Ink stability, low CPU, and cool device operation).
+  - Turn device screen OFF while mirroring (`--turn-screen-off`) to save E-Ink battery and operate 100% from PC.
   - Stay awake while connected (`--stay-awake`).
   - Read-only viewer mode (`--no-control`).
   - MP4 session recording (`--record=<filename>`).
-- **Integrated Virtual Navigation Bar**: Hardware Back, Home, Recent Apps, Volume, E-Ink refresh, and Sleep buttons right below the viewport.
+- **Remote E-Ink Controls & Hotkey Guide**:
+  - Remote hardware buttons: Back, Home, Recent Apps, Volume Up/Down, and Lock/Sleep.
+  - E-Ink controls: Full-screen refresh to clear ghosting and A2 speed mode toggle.
+  - Live cheat-sheet of Scrcpy keyboard shortcuts and instant drag-and-drop APK installation.
 
 ### 3. 📶 1-Click Wireless ADB (Cable-Free Mode)
 - Automatically detects the device's local Wi-Fi IP (e.g. `192.168.1.11`).
