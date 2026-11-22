@@ -90,33 +90,36 @@ class MainWindow(ctk.CTk):
         self.refresh_device_status_async()
 
     def _find_backup_file(self, *filenames_or_prefixes):
-        """Searches for backup files in current directory, executable directory, or base MEIPASS."""
+        """Searches for partition or recovery images across backups, assets, and base directories."""
         search_roots = [
             os.getcwd(),
             os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else None,
+            getattr(sys, '_MEIPASS', None),
+            os.path.dirname(os.path.abspath(__file__)),
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            getattr(sys, '_MEIPASS', None)
         ]
+        subdirs = ["backups", "assets", ""]
         for root in search_roots:
             if not root or not os.path.isdir(root):
                 continue
-            backup_dir = os.path.join(root, "backups")
-            if os.path.isdir(backup_dir):
+            for sub in subdirs:
+                target_dir = os.path.join(root, sub) if sub else root
+                if not os.path.isdir(target_dir):
+                    continue
                 # Try exact matches first
                 for name in filenames_or_prefixes:
-                    p = os.path.join(backup_dir, name)
+                    p = os.path.join(target_dir, name)
                     if os.path.isfile(p):
                         return os.path.abspath(p)
                 # Try prefix matches
-                for f in sorted(os.listdir(backup_dir), reverse=True):
-                    for name in filenames_or_prefixes:
-                        if f.startswith(name) and f.endswith(".img"):
-                            return os.path.abspath(os.path.join(backup_dir, f))
-            # Also check root directly
-            for name in filenames_or_prefixes:
-                p = os.path.join(root, name)
-                if os.path.isfile(p):
-                    return os.path.abspath(p)
+                try:
+                    for f in sorted(os.listdir(target_dir), reverse=True):
+                        for name in filenames_or_prefixes:
+                            clean_prefix = name.replace(".img", "")
+                            if (f == name or f.startswith(clean_prefix)) and f.endswith(".img"):
+                                return os.path.abspath(os.path.join(target_dir, f))
+                except Exception:
+                    pass
         return None
 
     def dispatch(self, func, *args, **kwargs):
@@ -921,7 +924,11 @@ class MainWindow(ctk.CTk):
         c1 = ctk.CTkFrame(page, corner_radius=12, fg_color=self.COLOR_CARD, border_width=1, border_color=self.COLOR_CARD_BORDER)
         c1.pack(fill="x", pady=6)
 
-        ctk.CTkLabel(c1, text="1️⃣ STEP 1: Bootloader Unlock Check & Fastboot Reboot", font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"), text_color=self.COLOR_CYAN).pack(anchor="w", padx=18, pady=(14, 4))
+        h1 = ctk.CTkFrame(c1, fg_color="transparent")
+        h1.pack(anchor="w", padx=18, pady=(14, 4))
+        ctk.CTkLabel(h1, text="STEP 1", font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"), fg_color="#1E293B", text_color=self.COLOR_CYAN, corner_radius=6, padx=8, pady=2).pack(side="left", padx=(0, 10))
+        ctk.CTkLabel(h1, text="Bootloader Unlock Check & Fastboot Reboot", font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"), text_color="#FFFFFF").pack(side="left")
+
         ctk.CTkLabel(
             c1,
             text="Flashing custom or Magisk-patched boot partitions requires an unlocked bootloader.\n"
@@ -944,7 +951,11 @@ class MainWindow(ctk.CTk):
         c2 = ctk.CTkFrame(page, corner_radius=12, fg_color=self.COLOR_CARD, border_width=1, border_color=self.COLOR_CARD_BORDER)
         c2.pack(fill="x", pady=6)
 
-        ctk.CTkLabel(c2, text="2️⃣ STEP 2: Obtain Stock Boot Image (stock_boot.img)", font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"), text_color=self.COLOR_CYAN).pack(anchor="w", padx=18, pady=(14, 4))
+        h2 = ctk.CTkFrame(c2, fg_color="transparent")
+        h2.pack(anchor="w", padx=18, pady=(14, 4))
+        ctk.CTkLabel(h2, text="STEP 2", font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"), fg_color="#1E293B", text_color=self.COLOR_CYAN, corner_radius=6, padx=8, pady=2).pack(side="left", padx=(0, 10))
+        ctk.CTkLabel(h2, text="Obtain Stock Boot Image (stock_boot.img)", font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"), text_color="#FFFFFF").pack(side="left")
+
         ctk.CTkLabel(
             c2,
             text="Magisk requires your untouched stock boot partition (~96 MB) to inject root code into the ramdisk.\n"
@@ -978,7 +989,11 @@ class MainWindow(ctk.CTk):
         c3 = ctk.CTkFrame(page, corner_radius=12, fg_color=self.COLOR_CARD, border_width=1, border_color=self.COLOR_CARD_BORDER)
         c3.pack(fill="x", pady=6)
 
-        ctk.CTkLabel(c3, text="3️⃣ STEP 3: Install Magisk App & Transfer boot.img to Device", font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"), text_color=self.COLOR_CYAN).pack(anchor="w", padx=18, pady=(14, 4))
+        h3 = ctk.CTkFrame(c3, fg_color="transparent")
+        h3.pack(anchor="w", padx=18, pady=(14, 4))
+        ctk.CTkLabel(h3, text="STEP 3", font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"), fg_color="#1E293B", text_color=self.COLOR_CYAN, corner_radius=6, padx=8, pady=2).pack(side="left", padx=(0, 10))
+        ctk.CTkLabel(h3, text="Install Magisk App & Transfer boot.img to Device", font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"), text_color="#FFFFFF").pack(side="left")
+
         ctk.CTkLabel(
             c3,
             text="Automatically installs the official Magisk v31+ APK onto your Onyx e-reader and pushes your\n"
@@ -1001,7 +1016,10 @@ class MainWindow(ctk.CTk):
         c4 = ctk.CTkFrame(page, corner_radius=12, fg_color=self.COLOR_CARD, border_width=1, border_color=self.COLOR_CARD_BORDER)
         c4.pack(fill="x", pady=6)
 
-        ctk.CTkLabel(c4, text="4️⃣ STEP 4: Patch Boot in Magisk & Retrieve Patched Image to PC", font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"), text_color=self.COLOR_CYAN).pack(anchor="w", padx=18, pady=(14, 4))
+        h4 = ctk.CTkFrame(c4, fg_color="transparent")
+        h4.pack(anchor="w", padx=18, pady=(14, 4))
+        ctk.CTkLabel(h4, text="STEP 4", font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"), fg_color="#1E293B", text_color=self.COLOR_CYAN, corner_radius=6, padx=8, pady=2).pack(side="left", padx=(0, 10))
+        ctk.CTkLabel(h4, text="Patch Boot in Magisk & Retrieve Patched Image to PC", font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"), text_color="#FFFFFF").pack(side="left")
 
         guide_box = ctk.CTkFrame(c4, corner_radius=8, fg_color="#111622", border_width=1, border_color="#1C2436")
         guide_box.pack(fill="x", padx=18, pady=(0, 10))
@@ -1042,7 +1060,11 @@ class MainWindow(ctk.CTk):
         c5 = ctk.CTkFrame(page, corner_radius=12, fg_color=self.COLOR_CARD, border_width=1, border_color=self.COLOR_CARD_BORDER)
         c5.pack(fill="x", pady=6)
 
-        ctk.CTkLabel(c5, text="5️⃣ STEP 5: Flash Patched Boot via Fastboot & Reboot to Root", font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"), text_color=self.COLOR_CYAN).pack(anchor="w", padx=18, pady=(14, 4))
+        h5 = ctk.CTkFrame(c5, fg_color="transparent")
+        h5.pack(anchor="w", padx=18, pady=(14, 4))
+        ctk.CTkLabel(h5, text="STEP 5", font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"), fg_color="#1E293B", text_color=self.COLOR_CYAN, corner_radius=6, padx=8, pady=2).pack(side="left", padx=(0, 10))
+        ctk.CTkLabel(h5, text="Flash Patched Boot via Fastboot & Reboot to Root", font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"), text_color="#FFFFFF").pack(side="left")
+
         ctk.CTkLabel(
             c5,
             text="Flashes the retrieved Magisk-patched boot image to your device's active boot slot via Fastboot,\n"
@@ -1064,7 +1086,11 @@ class MainWindow(ctk.CTk):
         c6 = ctk.CTkFrame(page, corner_radius=12, fg_color=self.COLOR_CARD, border_width=1, border_color=self.COLOR_CARD_BORDER)
         c6.pack(fill="x", pady=6)
 
-        ctk.CTkLabel(c6, text="6️⃣ STEP 6: Verify Root Access, Button Wake & Safety Rollback", font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"), text_color=self.COLOR_CYAN).pack(anchor="w", padx=18, pady=(14, 4))
+        h6 = ctk.CTkFrame(c6, fg_color="transparent")
+        h6.pack(anchor="w", padx=18, pady=(14, 4))
+        ctk.CTkLabel(h6, text="STEP 6", font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"), fg_color="#1E293B", text_color=self.COLOR_CYAN, corner_radius=6, padx=8, pady=2).pack(side="left", padx=(0, 10))
+        ctk.CTkLabel(h6, text="Verify Root Access, Button Wake & Safety Rollback", font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"), text_color="#FFFFFF").pack(side="left")
+
         ctk.CTkLabel(
             c6,
             text="Verify your Superuser privileges, install the hardware button wake module, or revert to stock boot.",
@@ -1086,7 +1112,47 @@ class MainWindow(ctk.CTk):
         c7 = ctk.CTkFrame(page, corner_radius=12, fg_color=self.COLOR_CARD, border_width=1, border_color=self.COLOR_CARD_BORDER)
         c7.pack(fill="x", pady=6)
 
-        ctk.CTkLabel(c7, text="7️⃣ STEP 7: Custom TWRP Recovery Studio (Touch & E-Ink DRM)", font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"), text_color=self.COLOR_CYAN).pack(anchor="w", padx=18, pady=(14, 4))
+        h7 = ctk.CTkFrame(c7, fg_color="transparent")
+        h7.pack(anchor="w", padx=18, pady=(14, 4))
+        ctk.CTkLabel(h7, text="STEP 7", font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"), fg_color="#1E293B", text_color=self.COLOR_CYAN, corner_radius=6, padx=8, pady=2).pack(side="left", padx=(0, 10))
+        ctk.CTkLabel(h7, text="Custom TWRP Recovery Studio (Touch & E-Ink DRM)", font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"), text_color="#FFFFFF").pack(side="left")
+
+        ctk.CTkLabel(
+            c7,
+            text="Onyx Boox C69HD custom TWRP 11.0 features native Qualcomm Atomic DRM EPDC E-Ink display drivers\n"
+                 "(Plane 68 SSPP ViG0) and FocalTech touchscreen digitizer support for full on-screen touch navigation.\n"
+                 "• Zero-Risk Tether-Boot: Streams TWRP to device RAM without flashing or altering internal storage.\n"
+                 "• Permanent Flash: Installs TWRP directly to the recovery partition.",
+            font=ctk.CTkFont(family="Segoe UI", size=11),
+            text_color=self.COLOR_TEXT_MUTED,
+            justify="left"
+        ).pack(anchor="w", padx=18, pady=(0, 10))
+
+        b_row7_1 = ctk.CTkFrame(c7, fg_color="transparent")
+        b_row7_1.pack(anchor="w", padx=18, pady=(0, 8))
+
+        ctk.CTkButton(b_row7_1, text="⚡ 1-Click: Tether-Boot TWRP to RAM (Zero-Risk)", height=36, corner_radius=8, fg_color=self.COLOR_GREEN, hover_color="#059669", font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"), command=self._action_boot_recovery).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(b_row7_1, text="💾 Flash TWRP to Recovery (Permanent)", height=36, corner_radius=8, fg_color="#1E293B", hover_color="#334155", font=ctk.CTkFont(family="Segoe UI", size=11), command=self._action_flash_recovery).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(b_row7_1, text="🔄 Reboot into Recovery Mode", height=36, corner_radius=8, fg_color="#283042", hover_color="#37435C", font=ctk.CTkFont(family="Segoe UI", size=11), command=self._action_reboot_recovery).pack(side="left")
+
+        b_row7_2 = ctk.CTkFrame(c7, fg_color="transparent")
+        b_row7_2.pack(anchor="w", padx=18, pady=(0, 8))
+
+        ctk.CTkButton(b_row7_2, text="📥 Use Bundled Working TWRP", height=32, corner_radius=8, fg_color=self.COLOR_BLUE, hover_color="#2563EB", font=ctk.CTkFont(family="Segoe UI", size=11), command=self._action_use_bundled_recovery).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(b_row7_2, text="📁 Browse Custom Recovery (.img)...", height=32, corner_radius=8, fg_color="#1E293B", hover_color="#334155", font=ctk.CTkFont(family="Segoe UI", size=11), command=self._action_browse_recovery).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(b_row7_2, text="🛡️ Dump Stock Recovery Partition (su)", height=32, corner_radius=8, fg_color="#131926", hover_color="#1F293D", font=ctk.CTkFont(family="Segoe UI", size=11), command=self._action_backup_stock_recovery).pack(side="left")
+
+        rec_txt = f"Recovery Image: {self._selected_recovery_img} [Ready]" if self._selected_recovery_img else "No recovery image selected (Click 'Use Bundled Working TWRP' or 'Browse')."
+        self.lbl_recovery_status = ctk.CTkLabel(
+            c7,
+            text=rec_txt,
+            font=ctk.CTkFont(family="Consolas", size=11),
+            text_color="#10B981" if self._selected_recovery_img else self.COLOR_TEXT_MUTED,
+            justify="left"
+        )
+        self.lbl_recovery_status.pack(anchor="w", padx=18, pady=(0, 14))
+
+        return page
         ctk.CTkLabel(
             c7,
             text="Onyx Boox C69HD custom TWRP 11.0 features native Qualcomm Atomic DRM EPDC E-Ink display drivers\n"
@@ -2350,8 +2416,43 @@ class MainWindow(ctk.CTk):
                 )
             messagebox.showinfo("TWRP Loaded", f"Verified working TWRP 11.0 loaded from:\n{found} ({size_mb:.1f} MB)\n\n• Atomic DRM EPDC E-Ink driver verified\n• Touchscreen digitizer verified")
             self.append_log(f"Loaded bundled TWRP recovery: {found}")
-        else:
-            messagebox.showwarning("Not Found", "No bundled recovery image found. Please browse for recovery.img.")
+            return
+
+        # Auto-download option if not found locally
+        if messagebox.askyesno(
+            "Download TWRP Recovery?",
+            "The bundled recovery image was not detected in local backups/ or assets/ directories.\n\n"
+            "Would you like to automatically download the verified TWRP 11.0 recovery image (~30 MB) from GitHub now?"
+        ):
+            def _download():
+                dest_dir = os.path.join(os.getcwd(), "backups")
+                os.makedirs(dest_dir, exist_ok=True)
+                dest_file = os.path.join(dest_dir, "twrp_c69hd_recovery.img")
+                urls = [
+                    "https://github.com/Zeusx212/onyx-c69hd-power-studio/releases/download/v1.1.4/twrp_c69hd_recovery.img",
+                    "https://github.com/Zeusx212/onyx-c69hd-power-studio/releases/latest/download/twrp_c69hd_recovery.img",
+                ]
+                for url in urls:
+                    try:
+                        self.append_log(f"Attempting download from {url}...")
+                        import urllib.request
+                        urllib.request.urlretrieve(url, dest_file)
+                        if os.path.exists(dest_file) and os.path.getsize(dest_file) > 10 * 1024 * 1024:
+                            self._selected_recovery_img = os.path.abspath(dest_file)
+                            size_mb = os.path.getsize(dest_file) / (1024 * 1024)
+                            def _ok():
+                                if hasattr(self, "lbl_recovery_status"):
+                                    self.lbl_recovery_status.configure(
+                                        text=f"Recovery Image: {dest_file} ({size_mb:.1f} MB) [Ready]",
+                                        text_color="#10B981"
+                                    )
+                                messagebox.showinfo("Download Complete", f"TWRP recovery successfully downloaded:\n{dest_file} ({size_mb:.1f} MB)")
+                            self.dispatch(_ok)
+                            return
+                    except Exception as ex:
+                        self.append_log(f"Download attempt error: {ex}")
+                self.dispatch(lambda: messagebox.showerror("Download Failed", "Could not download TWRP recovery image. Please use 'Browse Custom Recovery' to select a local .img file."))
+            threading.Thread(target=_download, daemon=True).start()
 
     def _action_browse_recovery(self):
         img_path = filedialog.askopenfilename(title="Select Custom Recovery Image (.img)", filetypes=[("Recovery Image", "*.img")])

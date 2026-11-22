@@ -27,6 +27,8 @@ class TestExecutableIntegrity(unittest.TestCase):
             os.path.join(INTERNAL_DIR, "assets", "c69hd-wake.zip"),
             os.path.join(INTERNAL_DIR, "assets", "shutdown-default.png"),
             os.path.join(INTERNAL_DIR, "assets", "standby-1.png"),
+            os.path.join(INTERNAL_DIR, "assets", "twrp_c69hd_recovery.img"),
+            os.path.join(BASE_DIR, "dist", "Onyx_C69HD_Power_Studio", "backups", "twrp_c69hd_recovery.img"),
         ]
         for asset in required_assets:
             self.assertTrue(

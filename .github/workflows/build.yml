@@ -40,6 +40,10 @@ jobs:
       - name: Create Windows ZIP Archive
         shell: pwsh
         run: |
+          New-Item -ItemType Directory -Force -Path "dist\Onyx_C69HD_Power_Studio\backups"
+          if (Test-Path "assets\twrp_c69hd_recovery.img") {
+            Copy-Item "assets\twrp_c69hd_recovery.img" -Destination "dist\Onyx_C69HD_Power_Studio\backups\" -Force
+          }
           Compress-Archive -Path "dist\Onyx_C69HD_Power_Studio" -DestinationPath "dist\Onyx_C69HD_Power_Studio_win_x64.zip" -Force
 
       - name: Upload Windows Artifact
@@ -82,6 +86,10 @@ jobs:
 
       - name: Create Linux Tarball Archive
         run: |
+          mkdir -p dist/Onyx_C69HD_Power_Studio/backups
+          if [ -f "assets/twrp_c69hd_recovery.img" ]; then
+            cp assets/twrp_c69hd_recovery.img dist/Onyx_C69HD_Power_Studio/backups/
+          fi
           cd dist
           tar -czvf Onyx_C69HD_Power_Studio_linux_x64.tar.gz Onyx_C69HD_Power_Studio
           cd ..
@@ -137,6 +145,9 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout Repository for Release Assets
+        uses: actions/checkout@v4
+
       - name: Download Artifacts
         uses: actions/download-artifact@v4
         with:
@@ -149,5 +160,6 @@ jobs:
             release_artifacts/Onyx_C69HD_Power_Studio_win_x64/Onyx_C69HD_Power_Studio_win_x64.zip
             release_artifacts/Onyx_C69HD_Power_Studio_linux_x64/Onyx_C69HD_Power_Studio_linux_x64.tar.gz
             release_artifacts/Onyx_C69HD_Power_Studio_macOS/Onyx_C69HD_Power_Studio_macOS.zip
+            assets/twrp_c69hd_recovery.img
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

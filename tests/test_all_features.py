@@ -536,5 +536,27 @@ class TestCrossPlatformClipboard(unittest.TestCase):
                     self.assertTrue(ok_lin)
                     self.assertIn("X11", msg_lin)
 
+class TestRecoveryBundling(unittest.TestCase):
+    def test_bundled_recovery_found(self):
+        from gui.main_window import MainWindow
+        adb = MagicMock()
+        device_ops = MagicMock()
+        scrcpy = MagicMock()
+        app = MainWindow(adb, device_ops, scrcpy)
+        try:
+            rec_path = app._find_backup_file("twrp_c69hd_recovery.img", "recovery.img", "twrp")
+            self.assertIsNotNone(rec_path, "Bundled TWRP recovery image should be discovered by _find_backup_file")
+            self.assertTrue(os.path.isfile(rec_path), f"File {rec_path} must exist on disk")
+            self.assertTrue(rec_path.endswith(".img"))
+            self.assertGreater(os.path.getsize(rec_path), 25 * 1024 * 1024, "Recovery image size should be ~31MB")
+            # Verify root tab headers have no combining keycap unicode characters (\u20e3)
+            # which cause rendering distortion in Tkinter
+            for attr_name in dir(app):
+                attr = getattr(app, attr_name)
+                if isinstance(attr, str) and "\u20e3" in attr:
+                    self.fail(f"Found combining keycap character in MainWindow attribute {attr_name}")
+        finally:
+            app.destroy()
+
 if __name__ == "__main__":
     unittest.main()
