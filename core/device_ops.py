@@ -400,6 +400,42 @@ class DeviceOps:
             return True, "c69hd-wake module installed! Reboot to activate hardware button wake."
         return False, f"Magisk module install output:\n{out or err}"
 
+    def boot_recovery_fastboot(self, image_path):
+        """
+        Tether-boots a custom recovery image (e.g. TWRP) directly into RAM via Fastboot ('fastboot boot <image>').
+        Zero-risk: leaves physical recovery and boot partitions untouched.
+        """
+        if not os.path.exists(image_path):
+            return False, f"Recovery image file not found: {image_path}"
+
+        self.adb.log(f"Tether-booting {image_path} to RAM via Fastboot...")
+        ok, out, err = self.adb.run_fastboot("boot", image_path)
+        if ok:
+            return True, "Recovery image sent to device RAM successfully! Device is tether-booting into custom recovery (TWRP)..."
+        return False, f"Fastboot boot failed: {err or out}"
+
+    def flash_recovery_fastboot(self, image_path, slot=None, reboot_to_recovery=True):
+        """
+        Flashes a custom recovery image permanently to the device recovery partition via Fastboot.
+        """
+        if not os.path.exists(image_path):
+            return False, f"Recovery image file not found: {image_path}"
+
+        self.adb.log(f"Flashing recovery partition with {image_path} via Fastboot...")
+        target_part = f"recovery{slot}" if slot else "recovery"
+        ok, out, err = self.adb.run_fastboot("flash", target_part, image_path)
+        if not ok and slot:
+            # Fallback to unslotted recovery partition
+            ok, out, err = self.adb.run_fastboot("flash", "recovery", image_path)
+
+        if ok:
+            if reboot_to_recovery:
+                self.adb.log("Rebooting device into recovery mode...")
+                self.adb.run_fastboot("reboot", "recovery")
+                return True, "Custom recovery flashed successfully! Device is rebooting into recovery..."
+            return True, "Custom recovery flashed successfully to recovery partition."
+        return False, f"Fastboot flash recovery failed: {err or out}"
+
     # ==========================================
     # BUTTON REMAPPING
     # ==========================================

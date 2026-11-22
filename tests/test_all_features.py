@@ -334,6 +334,64 @@ class TestDeviceOps(unittest.TestCase):
         ok, msg = self.ops.verify_root_access()
         self.assertFalse(ok)
 
+    def test_boot_recovery_fastboot(self):
+        # 1. Missing file
+        ok, msg = self.ops.boot_recovery_fastboot("non_existent_rec.img")
+        self.assertFalse(ok)
+        self.assertIn("not found", msg)
+
+        # 2. Existing file - Fastboot boot success
+        test_file = os.path.join(BASE_DIR, "tests", "_test_rec.img")
+        with open(test_file, "wb") as f:
+            f.write(b"MOCK_RECOVERY_IMAGE_DATA")
+        try:
+            self.adb.run_fastboot.return_value = (True, "booting...", "")
+            ok, msg = self.ops.boot_recovery_fastboot(test_file)
+            self.assertTrue(ok)
+            self.assertIn("tether-booting", msg)
+            self.adb.run_fastboot.assert_called_with("boot", test_file)
+
+            # 3. Fastboot boot failure
+            self.adb.run_fastboot.return_value = (False, "", "FAILED (remote: unknown command)")
+            ok, msg = self.ops.boot_recovery_fastboot(test_file)
+            self.assertFalse(ok)
+            self.assertIn("Fastboot boot failed", msg)
+        finally:
+            if os.path.exists(test_file):
+                os.remove(test_file)
+
+    def test_flash_recovery_fastboot(self):
+        # 1. Missing file
+        ok, msg = self.ops.flash_recovery_fastboot("non_existent_rec.img")
+        self.assertFalse(ok)
+
+        # 2. Existing file - Flash slotted recovery with reboot
+        test_file = os.path.join(BASE_DIR, "tests", "_test_rec_flash.img")
+        with open(test_file, "wb") as f:
+            f.write(b"MOCK_RECOVERY_IMAGE_DATA")
+        try:
+            self.adb.run_fastboot.side_effect = [
+                (True, "writing 'recovery_a'...", ""),
+                (True, "rebooting...", "")
+            ]
+            ok, msg = self.ops.flash_recovery_fastboot(test_file, slot="_a", reboot_to_recovery=True)
+            self.assertTrue(ok)
+            self.assertIn("flashed successfully", msg)
+
+            # 3. Slotted fails, unslotted fallback
+            self.adb.run_fastboot.side_effect = [
+                (False, "", "unknown partition recovery_a"),
+                (True, "writing 'recovery'...", ""),
+                (True, "rebooting...", "")
+            ]
+            ok, msg = self.ops.flash_recovery_fastboot(test_file, slot="_a", reboot_to_recovery=True)
+            self.assertTrue(ok)
+            self.assertIn("flashed successfully", msg)
+        finally:
+            self.adb.run_fastboot.side_effect = None
+            if os.path.exists(test_file):
+                os.remove(test_file)
+
 class TestScrcpyManager(unittest.TestCase):
     def setUp(self):
         self.scrcpy = ScrcpyManager()

@@ -104,6 +104,11 @@ The tool features a dedicated 6-Step Root Wizard engineered to make rooting the 
    - 1-Click **"✔️ Verify Root Access"** runs `su -c 'id'` to confirm `uid=0(root)`.
    - 1-Click **"⚡ Install c69hd-wake Magisk Module"** configures hardware key wakeup from deep sleep.
    - 1-Click **"🚨 Emergency Stock Boot Restore"** reverts to 100% factory unrooted stock boot at any time.
+7. **Step 7: Custom TWRP Recovery Studio (Touch & E-Ink EPDC DRM)**
+   - **Verified Working TWRP 11.0**: Solves the E-Ink black screen / frozen splash issue by binding to primary graphics Plane 68 (`SSPP ViG0`) with vendor atomic DRM EPDC parameters and `DRM_MODE_ATOMIC_NONBLOCK`, paired with FocalTech multi-touch digitizer navigation.
+   - **1-Click Zero-Risk Tether-Boot (Recommended)**: Runs `fastboot boot recovery.img` to stream TWRP directly into RAM without touching or modifying internal storage. Ideal for full NANDroid backups, testing, and partition inspection.
+   - **1-Click Permanent Flash**: Executes `fastboot flash recovery recovery.img` (or `recovery_a` / `recovery_b`) and optionally reboots straight into custom recovery.
+   - **Bundled Working Image**: Pre-loaded with verified `twrp_c69hd_recovery.img` in `backups/`, with support for custom `.img` file browsing and stock recovery dumping.
 
 ### 10. 🔘 Hardware Button Remapper
 - Remap front button (`KEYCODE_BACK`):
@@ -181,6 +186,6 @@ python run_gui.py
 ## 🔗 Related Repositories & Credits
 
 - **Root & Partitions**: [Zeusx212/onyx-c69hd-root](https://github.com/Zeusx212/onyx-c69hd-root)
+- **Custom TWRP Recovery**: [Zeusx212/android_device_onyx_c69](https://github.com/Zeusx212/android_device_onyx_c69) (enhanced with native Qualcomm Atomic DRM EPDC E-Ink driver & touch support, forked from [@7sarus](https://github.com/7sarus))
 - **Button Remap**: [Zeusx212/onyx-c69hd-button-remap](https://github.com/Zeusx212/onyx-c69hd-button-remap)
 - **Keyboard Debouncer**: [Zeusx212/keyboard-debouncer](https://github.com/Zeusx212/keyboard-debouncer)
-- **Device Tree & TWRP**: [7sarus/android_device_onyx_c69](https://github.com/7sarus/android_device_onyx_c69) by [@7sarus](https://github.com/7sarus)
