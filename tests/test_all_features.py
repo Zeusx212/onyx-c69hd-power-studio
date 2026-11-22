@@ -239,6 +239,101 @@ class TestDeviceOps(unittest.TestCase):
         finally:
             shutil.rmtree(test_dir, ignore_errors=True)
 
+    def test_unlock_bootloader_fastboot(self):
+        # 1. Success on flashing unlock
+        self.adb.run_fastboot.return_value = (True, "OKAY", "")
+        ok, msg = self.ops.unlock_bootloader_fastboot()
+        self.assertTrue(ok)
+        self.adb.run_fastboot.assert_called_with("flashing", "unlock")
+
+        # 2. Fallback to oem unlock
+        self.adb.run_fastboot.side_effect = [
+            (False, "", "unknown command"),
+            (True, "OKAY", "")
+        ]
+        ok, msg = self.ops.unlock_bootloader_fastboot()
+        self.assertTrue(ok)
+
+        # 3. Both fail
+        self.adb.run_fastboot.side_effect = [
+            (False, "", "failed 1"),
+            (False, "", "failed 2")
+        ]
+        ok, msg = self.ops.unlock_bootloader_fastboot()
+        self.assertFalse(ok)
+        self.adb.run_fastboot.side_effect = None
+
+    def test_push_boot_to_device(self):
+        # 1. Non-existent file
+        ok, msg = self.ops.push_boot_to_device("non_existent_boot_image.img")
+        self.assertFalse(ok)
+        self.assertIn("not found", msg)
+
+        # 2. Existing file push
+        test_file = os.path.join(BASE_DIR, "tests", "_test_push_boot.img")
+        with open(test_file, "wb") as f:
+            f.write(b"MOCK_BOOT_IMAGE_DATA")
+        try:
+            self.adb.run_shell.return_value = (True, "", "")
+            self.adb.run_adb.return_value = (True, "1 file pushed", "")
+            ok, msg = self.ops.push_boot_to_device(test_file)
+            self.assertTrue(ok)
+            self.assertIn("/sdcard/Download/stock_boot.img", msg)
+        finally:
+            if os.path.exists(test_file):
+                os.remove(test_file)
+
+    def test_pull_latest_magisk_patched_boot(self):
+        # 1. No patched file found on device
+        self.adb.run_shell.return_value = (True, "", "")
+        ok, path, msg = self.ops.pull_latest_magisk_patched_boot()
+        self.assertFalse(ok)
+        self.assertIsNone(path)
+        self.assertIn("No Magisk-patched", msg)
+
+        # 2. Patched file found and pulled
+        test_out_dir = os.path.join(BASE_DIR, "tests", "_test_pull_dir")
+        os.makedirs(test_out_dir, exist_ok=True)
+        try:
+            self.adb.run_shell.return_value = (True, "/sdcard/Download/magisk_patched_25200_abcde.img\n", "")
+            
+            # Simulate pull creating local file
+            def mock_pull(*args):
+                dest = args[2]
+                with open(dest, "wb") as f:
+                    f.write(b"MOCK_PATCHED_BOOT_BYTES" * 100)
+                return True, "1 file pulled", ""
+
+            self.adb.run_adb.side_effect = mock_pull
+            ok, local_path, msg = self.ops.pull_latest_magisk_patched_boot(dest_dir=test_out_dir)
+            self.assertTrue(ok)
+            self.assertIsNotNone(local_path)
+            self.assertTrue(os.path.exists(local_path))
+            self.assertIn("magisk_patched_25200_abcde.img", local_path)
+        finally:
+            self.adb.run_adb.side_effect = None
+            shutil.rmtree(test_out_dir, ignore_errors=True)
+
+    def test_launch_magisk_app(self):
+        self.adb.run_shell.return_value = (True, "Events injected: 1", "")
+        ok, msg = self.ops.launch_magisk_app()
+        self.assertTrue(ok)
+        self.assertIn("Magisk app opened", msg)
+
+        self.adb.run_shell.return_value = (False, "", "Activity not found")
+        ok, msg = self.ops.launch_magisk_app()
+        self.assertFalse(ok)
+
+    def test_verify_root_access(self):
+        self.adb.run_shell.return_value = (True, "uid=0(root) gid=0(root) groups=0(root)\n", "")
+        ok, msg = self.ops.verify_root_access()
+        self.assertTrue(ok)
+        self.assertIn("Root verified", msg)
+
+        self.adb.run_shell.return_value = (False, "uid=2000(shell) gid=2000(shell)\n", "")
+        ok, msg = self.ops.verify_root_access()
+        self.assertFalse(ok)
+
 class TestScrcpyManager(unittest.TestCase):
     def setUp(self):
         self.scrcpy = ScrcpyManager()

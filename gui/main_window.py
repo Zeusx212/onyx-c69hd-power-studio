@@ -6,6 +6,7 @@ Screensaver Studio, Book Library Sync, E-Ink App Sideload Hub, Remote E-Ink Cont
 """
 
 import os
+import sys
 import queue
 import threading
 import datetime
@@ -52,6 +53,8 @@ class MainWindow(ctk.CTk):
         self._ctk_screenshot_image = None
         self._last_pil_screenshot = None
         self._record_video_path = None
+        self._selected_stock_boot = self._find_backup_file("stock_boot_a.img", "stock_boot_b.img", "stock_boot.img")
+        self._selected_patched_boot = self._find_backup_file("magisk_patched_boot_a.img", "magisk_patched")
 
         # Colors
         self.COLOR_SIDEBAR = "#0F1219"
@@ -84,6 +87,36 @@ class MainWindow(ctk.CTk):
 
         # Initial device probe
         self.refresh_device_status_async()
+
+    def _find_backup_file(self, *filenames_or_prefixes):
+        """Searches for backup files in current directory, executable directory, or base MEIPASS."""
+        search_roots = [
+            os.getcwd(),
+            os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else None,
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            getattr(sys, '_MEIPASS', None)
+        ]
+        for root in search_roots:
+            if not root or not os.path.isdir(root):
+                continue
+            backup_dir = os.path.join(root, "backups")
+            if os.path.isdir(backup_dir):
+                # Try exact matches first
+                for name in filenames_or_prefixes:
+                    p = os.path.join(backup_dir, name)
+                    if os.path.isfile(p):
+                        return os.path.abspath(p)
+                # Try prefix matches
+                for f in sorted(os.listdir(backup_dir), reverse=True):
+                    for name in filenames_or_prefixes:
+                        if f.startswith(name) and f.endswith(".img"):
+                            return os.path.abspath(os.path.join(backup_dir, f))
+            # Also check root directly
+            for name in filenames_or_prefixes:
+                p = os.path.join(root, name)
+                if os.path.isfile(p):
+                    return os.path.abspath(p)
+        return None
 
     def dispatch(self, func, *args, **kwargs):
         """Thread-safe queue dispatch to execute callbacks on the Tkinter main loop."""
@@ -845,51 +878,208 @@ class MainWindow(ctk.CTk):
     def _create_page_root(self):
         page = ctk.CTkScrollableFrame(self.content_container, fg_color="transparent")
 
-        lbl_h = ctk.CTkLabel(page, text="Rooting & Partition Management", font=ctk.CTkFont(family="Segoe UI", size=22, weight="bold"), text_color="#FFFFFF")
+        lbl_h = ctk.CTkLabel(page, text="🛡️ Magisk Rooting & Partition Studio", font=ctk.CTkFont(family="Segoe UI", size=22, weight="bold"), text_color="#FFFFFF")
         lbl_h.pack(anchor="w", pady=(0, 4))
-        lbl_sub = ctk.CTkLabel(page, text="Backup stock partitions, flash Magisk patched boot images, and enable hardware wake.", font=ctk.CTkFont(family="Segoe UI", size=12), text_color=self.COLOR_TEXT_MUTED)
+        lbl_sub = ctk.CTkLabel(page, text="Interactive, step-by-step guided workflow to safely backup stock partitions, patch boot with Magisk, and gain full root.", font=ctk.CTkFont(family="Segoe UI", size=12), text_color=self.COLOR_TEXT_MUTED)
         lbl_sub.pack(anchor="w", pady=(0, 16))
 
-        # Card 1: Stock Backup
-        c1 = ctk.CTkFrame(page, corner_radius=12, fg_color=self.COLOR_CARD, border_width=1, border_color=self.COLOR_CARD_BORDER)
-        c1.pack(fill="x", pady=8)
+        # ==========================================
+        # TOP STATUS DASHBOARD
+        # ==========================================
+        c_status = ctk.CTkFrame(page, corner_radius=12, fg_color="#101522", border_width=1, border_color="#1F2A3E")
+        c_status.pack(fill="x", pady=(0, 10))
 
-        ctk.CTkLabel(c1, text="1. Stock Partition Backup", font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"), text_color=self.COLOR_CYAN).pack(anchor="w", padx=18, pady=(16, 4))
+        stat_head = ctk.CTkFrame(c_status, fg_color="transparent")
+        stat_head.pack(fill="x", padx=16, pady=(12, 4))
+        ctk.CTkLabel(stat_head, text="📊 Live Device & Root Status Dashboard", font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"), text_color=self.COLOR_CYAN).pack(side="left")
+
+        ctk.CTkButton(
+            stat_head,
+            text="🔄 Refresh",
+            width=80,
+            height=26,
+            corner_radius=6,
+            fg_color="#1E293B",
+            hover_color="#334155",
+            font=ctk.CTkFont(family="Segoe UI", size=11),
+            command=self.refresh_device_status_async
+        ).pack(side="right")
+
+        self.lbl_root_wizard_status = ctk.CTkLabel(
+            c_status,
+            text="Probing device connection, bootloader, and root status...",
+            font=ctk.CTkFont(family="Consolas", size=11),
+            text_color="#E2E8F0",
+            justify="left"
+        )
+        self.lbl_root_wizard_status.pack(anchor="w", padx=16, pady=(0, 12))
+
+        # ==========================================
+        # STEP 1: PREREQUISITES & BOOTLOADER UNLOCK
+        # ==========================================
+        c1 = ctk.CTkFrame(page, corner_radius=12, fg_color=self.COLOR_CARD, border_width=1, border_color=self.COLOR_CARD_BORDER)
+        c1.pack(fill="x", pady=6)
+
+        ctk.CTkLabel(c1, text="1️⃣ STEP 1: Bootloader Unlock Check & Fastboot Reboot", font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"), text_color=self.COLOR_CYAN).pack(anchor="w", padx=18, pady=(14, 4))
         ctk.CTkLabel(
             c1,
-            text="Dumps active boot (boot_a / boot_b), vbmeta, and optional dtbo/recovery into './backups/'.\nEssential before attempting any custom image flashes.",
-            font=ctk.CTkFont(family="Segoe UI", size=12),
+            text="Flashing custom or Magisk-patched boot partitions requires an unlocked bootloader.\n"
+                 "The Onyx Boox C69HD typically comes factory unlocked. If locked, enter Fastboot mode and unlock below.",
+            font=ctk.CTkFont(family="Segoe UI", size=11),
             text_color=self.COLOR_TEXT_MUTED,
             justify="left"
-        ).pack(anchor="w", padx=18, pady=(0, 12))
+        ).pack(anchor="w", padx=18, pady=(0, 10))
 
-        b_row = ctk.CTkFrame(c1, fg_color="transparent")
-        b_row.pack(anchor="w", padx=18, pady=(0, 16))
+        b_row1 = ctk.CTkFrame(c1, fg_color="transparent")
+        b_row1.pack(anchor="w", padx=18, pady=(0, 14))
 
-        ctk.CTkButton(b_row, text="📥  Backup Boot & VBMeta", height=36, corner_radius=8, fg_color=self.COLOR_BLUE, hover_color="#2563EB", command=self._action_backup_partitions).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(b_row, text="📥  Full Partition Dump (Boot, DTBO, Recovery, VBMeta)", height=36, corner_radius=8, fg_color="#283042", hover_color="#37435C", command=self._action_backup_full_partitions).pack(side="left")
+        ctk.CTkButton(b_row1, text="⚡ 1. Reboot to Fastboot Mode", height=34, corner_radius=8, fg_color="#283042", hover_color="#3B4660", command=lambda: self.ops.reboot_device("bootloader")).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(b_row1, text="🔓 2. Unlock Bootloader (Fastboot)", height=34, corner_radius=8, fg_color="#1E293B", hover_color="#334155", command=self._action_unlock_bootloader).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(b_row1, text="🔄 Return to Android System", height=34, corner_radius=8, fg_color="#131926", hover_color="#1F293D", command=lambda: self.ops.reboot_device("system")).pack(side="left")
 
-        # Card 2: Magisk Root & Fastboot
+        # ==========================================
+        # STEP 2: OBTAIN STOCK BOOT IMAGE
+        # ==========================================
         c2 = ctk.CTkFrame(page, corner_radius=12, fg_color=self.COLOR_CARD, border_width=1, border_color=self.COLOR_CARD_BORDER)
-        c2.pack(fill="x", pady=8)
+        c2.pack(fill="x", pady=6)
 
-        ctk.CTkLabel(c2, text="2. Magisk Root Installation & Fastboot Flashing", font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"), text_color=self.COLOR_CYAN).pack(anchor="w", padx=18, pady=(16, 4))
-        ctk.CTkLabel(c2, text="1. Install Magisk APK -> 2. Patch your dumped stock_boot.img -> 3. Flash patched image via Fastboot.", font=ctk.CTkFont(family="Segoe UI", size=12), text_color=self.COLOR_TEXT_MUTED).pack(anchor="w", padx=18, pady=(0, 12))
+        ctk.CTkLabel(c2, text="2️⃣ STEP 2: Obtain Stock Boot Image (stock_boot.img)", font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"), text_color=self.COLOR_CYAN).pack(anchor="w", padx=18, pady=(14, 4))
+        ctk.CTkLabel(
+            c2,
+            text="Magisk requires your untouched stock boot partition (~96 MB) to inject root code into the ramdisk.\n"
+                 "You can load the verified pre-dumped stock image in backups, dump it from the device, or browse locally.",
+            font=ctk.CTkFont(family="Segoe UI", size=11),
+            text_color=self.COLOR_TEXT_MUTED,
+            justify="left"
+        ).pack(anchor="w", padx=18, pady=(0, 10))
 
-        btn_row_m = ctk.CTkFrame(c2, fg_color="transparent")
-        btn_row_m.pack(fill="x", padx=18, pady=(0, 16))
+        b_row2 = ctk.CTkFrame(c2, fg_color="transparent")
+        b_row2.pack(anchor="w", padx=18, pady=(0, 8))
 
-        ctk.CTkButton(btn_row_m, text="📦 1. Install Magisk APK", height=36, corner_radius=8, fg_color="#283042", command=self._action_install_magisk).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(btn_row_m, text="⚡ 2. Reboot to Fastboot", height=36, corner_radius=8, fg_color="#283042", command=lambda: self.ops.reboot_device("bootloader")).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(btn_row_m, text="🚀 3. Flash Patched Boot...", height=36, corner_radius=8, fg_color=self.COLOR_BLUE, command=self._action_flash_patched_boot).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(btn_row_m, text="🔄 Restore Stock Boot...", height=36, corner_radius=8, fg_color=self.COLOR_RED, command=self._action_restore_stock_boot).pack(side="left")
+        ctk.CTkButton(b_row2, text="📥 Use Pre-dumped Stock Boot", height=34, corner_radius=8, fg_color=self.COLOR_GREEN, hover_color="#059669", font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"), command=self._action_use_predumped_stock_boot).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(b_row2, text="📥 Dump from Device (Root/su)", height=34, corner_radius=8, fg_color=self.COLOR_BLUE, hover_color="#2563EB", command=self._action_backup_partitions).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(b_row2, text="📁 Browse Stock boot.img...", height=34, corner_radius=8, fg_color="#283042", hover_color="#3B4660", command=self._action_browse_stock_boot).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(b_row2, text="📦 Full Partition Dump", height=34, corner_radius=8, fg_color="#1E293B", hover_color="#334155", command=self._action_backup_full_partitions).pack(side="left")
 
-        # Card 3: Button Wake Magisk Module
+        stock_txt = f"Stock Boot: {self._selected_stock_boot} [Ready]" if self._selected_stock_boot else "No stock boot image selected yet (Click 'Use Pre-dumped' or Option A/B above)."
+        self.lbl_stock_boot_status = ctk.CTkLabel(
+            c2,
+            text=stock_txt,
+            font=ctk.CTkFont(family="Consolas", size=11),
+            text_color="#38BDF8" if self._selected_stock_boot else self.COLOR_TEXT_MUTED,
+            justify="left"
+        )
+        self.lbl_stock_boot_status.pack(anchor="w", padx=18, pady=(0, 14))
+
+        # ==========================================
+        # STEP 3: TRANSFER & INSTALL MAGISK APP
+        # ==========================================
         c3 = ctk.CTkFrame(page, corner_radius=12, fg_color=self.COLOR_CARD, border_width=1, border_color=self.COLOR_CARD_BORDER)
-        c3.pack(fill="x", pady=8)
+        c3.pack(fill="x", pady=6)
 
-        ctk.CTkLabel(c3, text="3. Hardware Physical Button Wake (Magisk Module)", font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"), text_color=self.COLOR_CYAN).pack(anchor="w", padx=18, pady=(16, 4))
-        ctk.CTkLabel(c3, text="Patches gpio-keys.kl so pressing the front center button or side keys instantly wakes the e-reader.", font=ctk.CTkFont(family="Segoe UI", size=12), text_color=self.COLOR_TEXT_MUTED).pack(anchor="w", padx=18, pady=(0, 12))
+        ctk.CTkLabel(c3, text="3️⃣ STEP 3: Install Magisk App & Transfer boot.img to Device", font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"), text_color=self.COLOR_CYAN).pack(anchor="w", padx=18, pady=(14, 4))
+        ctk.CTkLabel(
+            c3,
+            text="Automatically installs the official Magisk v31+ APK onto your Onyx e-reader and pushes your\n"
+                 "stock boot image directly to '/sdcard/Download/stock_boot.img' so it is immediately ready to patch.",
+            font=ctk.CTkFont(family="Segoe UI", size=11),
+            text_color=self.COLOR_TEXT_MUTED,
+            justify="left"
+        ).pack(anchor="w", padx=18, pady=(0, 10))
+
+        b_row3 = ctk.CTkFrame(c3, fg_color="transparent")
+        b_row3.pack(anchor="w", padx=18, pady=(0, 14))
+
+        ctk.CTkButton(b_row3, text="📦 1-Click: Install Magisk App & Push boot.img", height=36, corner_radius=8, fg_color=self.COLOR_GREEN, hover_color="#059669", font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"), command=self._action_install_magisk_and_push_boot).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(b_row3, text="📱 Open Magisk App on Device", height=36, corner_radius=8, fg_color="#283042", hover_color="#3B4660", command=self._action_launch_magisk).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(b_row3, text="📺 Open Screen Mirror (Scrcpy)", height=36, corner_radius=8, fg_color="#1E293B", hover_color="#334155", command=lambda: self._show_page("screen")).pack(side="left")
+
+        # ==========================================
+        # STEP 4: PATCH IN MAGISK & PULL IMAGE
+        # ==========================================
+        c4 = ctk.CTkFrame(page, corner_radius=12, fg_color=self.COLOR_CARD, border_width=1, border_color=self.COLOR_CARD_BORDER)
+        c4.pack(fill="x", pady=6)
+
+        ctk.CTkLabel(c4, text="4️⃣ STEP 4: Patch Boot in Magisk & Retrieve Patched Image to PC", font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"), text_color=self.COLOR_CYAN).pack(anchor="w", padx=18, pady=(14, 4))
+
+        guide_box = ctk.CTkFrame(c4, corner_radius=8, fg_color="#111622", border_width=1, border_color="#1C2436")
+        guide_box.pack(fill="x", padx=18, pady=(0, 10))
+
+        ctk.CTkLabel(
+            guide_box,
+            text="Follow these 4 simple taps on your Onyx screen (or via Scrcpy Screen Mirror tab):\n"
+                 "  1. Open the Magisk app -> Tap 'Install' on the top Magisk card.\n"
+                 "  2. Choose 'Select and Patch a File'.\n"
+                 "  3. In file picker, navigate to 'Download' folder and select 'stock_boot.img'.\n"
+                 "  4. Tap 'LET'S GO' -> Magisk generates 'magisk_patched_*.img' in Download.\n"
+                 "  * Alternatively, click 'Use Pre-Patched Image' to skip patching and flash immediately!",
+            font=ctk.CTkFont(family="Segoe UI", size=11),
+            text_color="#CBD5E1",
+            justify="left"
+        ).pack(anchor="w", padx=12, pady=10)
+
+        b_row4 = ctk.CTkFrame(c4, fg_color="transparent")
+        b_row4.pack(anchor="w", padx=18, pady=(0, 8))
+
+        ctk.CTkButton(b_row4, text="📥 1-Click: Auto-Detect & Pull Patched Image to PC", height=36, corner_radius=8, fg_color=self.COLOR_BLUE, hover_color="#2563EB", font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"), command=self._action_pull_patched_boot).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(b_row4, text="⚡ Use Pre-Patched Image", height=36, corner_radius=8, fg_color=self.COLOR_GREEN, hover_color="#059669", font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"), command=self._action_use_predumped_patched_boot).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(b_row4, text="📁 Browse Patched Image...", height=36, corner_radius=8, fg_color="#283042", hover_color="#3B4660", command=self._action_browse_patched_boot).pack(side="left")
+
+        patched_txt = f"Patched Boot: {self._selected_patched_boot} [Ready to Flash]" if self._selected_patched_boot else "No patched image selected yet (Click 'Auto-Detect & Pull' or 'Use Pre-Patched')."
+        self.lbl_patched_boot_status = ctk.CTkLabel(
+            c4,
+            text=patched_txt,
+            font=ctk.CTkFont(family="Consolas", size=11),
+            text_color="#10B981" if self._selected_patched_boot else self.COLOR_TEXT_MUTED,
+            justify="left"
+        )
+        self.lbl_patched_boot_status.pack(anchor="w", padx=18, pady=(0, 14))
+
+        # ==========================================
+        # STEP 5: FLASH PATCHED BOOT & REBOOT
+        # ==========================================
+        c5 = ctk.CTkFrame(page, corner_radius=12, fg_color=self.COLOR_CARD, border_width=1, border_color=self.COLOR_CARD_BORDER)
+        c5.pack(fill="x", pady=6)
+
+        ctk.CTkLabel(c5, text="5️⃣ STEP 5: Flash Patched Boot via Fastboot & Reboot to Root", font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"), text_color=self.COLOR_CYAN).pack(anchor="w", padx=18, pady=(14, 4))
+        ctk.CTkLabel(
+            c5,
+            text="Flashes the retrieved Magisk-patched boot image to your device's active boot slot via Fastboot,\n"
+                 "then automatically reboots into fully-rooted Android.",
+            font=ctk.CTkFont(family="Segoe UI", size=11),
+            text_color=self.COLOR_TEXT_MUTED,
+            justify="left"
+        ).pack(anchor="w", padx=18, pady=(0, 10))
+
+        b_row5 = ctk.CTkFrame(c5, fg_color="transparent")
+        b_row5.pack(anchor="w", padx=18, pady=(0, 14))
+
+        ctk.CTkButton(b_row5, text="⚡ 1. Reboot to Fastboot Mode", height=36, corner_radius=8, fg_color="#283042", hover_color="#3B4660", command=lambda: self.ops.reboot_device("bootloader")).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(b_row5, text="🚀 2. Flash Patched Boot & Reboot Device", height=36, corner_radius=8, fg_color=self.COLOR_GREEN, hover_color="#059669", font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"), command=self._action_flash_patched_boot_wizard).pack(side="left")
+
+        # ==========================================
+        # STEP 6: VERIFY ROOT & SAFETY ROLLBACK
+        # ==========================================
+        c6 = ctk.CTkFrame(page, corner_radius=12, fg_color=self.COLOR_CARD, border_width=1, border_color=self.COLOR_CARD_BORDER)
+        c6.pack(fill="x", pady=6)
+
+        ctk.CTkLabel(c6, text="6️⃣ STEP 6: Verify Root Access, Button Wake & Safety Rollback", font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"), text_color=self.COLOR_CYAN).pack(anchor="w", padx=18, pady=(14, 4))
+        ctk.CTkLabel(
+            c6,
+            text="Verify your Superuser privileges, install the hardware button wake module, or revert to stock boot.",
+            font=ctk.CTkFont(family="Segoe UI", size=11),
+            text_color=self.COLOR_TEXT_MUTED,
+            justify="left"
+        ).pack(anchor="w", padx=18, pady=(0, 10))
+
+        b_row6 = ctk.CTkFrame(c6, fg_color="transparent")
+        b_row6.pack(anchor="w", padx=18, pady=(0, 14))
+
+        ctk.CTkButton(b_row6, text="🔍 1. Verify Root Access (su test)", height=34, corner_radius=8, fg_color=self.COLOR_BLUE, hover_color="#2563EB", command=self._action_verify_root).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(b_row6, text="⚡ 2. Install 'c69hd-wake' Magisk Module", height=34, corner_radius=8, fg_color="#1E293B", hover_color="#334155", command=self._action_install_wake_module).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(b_row6, text="🔄 Emergency: Restore Stock Boot", height=34, corner_radius=8, fg_color=self.COLOR_RED, hover_color="#DC2626", command=self._action_restore_stock_boot).pack(side="left")
+
+        return page
 
         ctk.CTkButton(c3, text="⚡ Install 'c69hd-wake' Magisk Module", height=38, corner_radius=8, fg_color=self.COLOR_GREEN, command=self._action_install_wake_module).pack(anchor="w", padx=18, pady=(0, 16))
 
@@ -1474,6 +1664,20 @@ class MainWindow(ctk.CTk):
             self.lbl_device_details.configure(text="Connect via USB or Wi-Fi")
             self.lbl_specs.configure(text="No device connected.")
 
+        if hasattr(self, "lbl_root_wizard_status"):
+            if info["connected"]:
+                mode_str = f"ADB Online ({info.get('model', 'C69HD')})" if info["mode"] == "adb" else "Fastboot Mode"
+                bl_str = "Unlocked [✓]" if info.get("unlocked") else "Locked [ ! ]"
+                rt_str = "Rooted (UID 0 Active) [✓]" if info.get("rooted") else "Not Rooted [ ]"
+                slot_str = info.get("boot_slot", "_a")
+                self.lbl_root_wizard_status.configure(
+                    text=f"Connection: {mode_str}   |   Slot: {slot_str}   |   Bootloader: {bl_str}   |   Root: {rt_str}"
+                )
+            else:
+                self.lbl_root_wizard_status.configure(
+                    text="Connection: Disconnected [ ! ]   |   Please connect your Onyx Boox C69HD with USB Debugging enabled."
+                )
+
     # =========================================================================
     # ACTIONS: WIRELESS ADB
     # =========================================================================
@@ -1713,14 +1917,42 @@ class MainWindow(ctk.CTk):
         threading.Thread(target=_run, daemon=True).start()
 
     # =========================================================================
-    # ACTIONS: ROOT & BUTTON REMAP
+    # ACTIONS: ROOT WIZARD & PARTITIONS
     # =========================================================================
+    def _action_unlock_bootloader(self):
+        if not messagebox.askyesno(
+            "Confirm Bootloader Unlock",
+            "WARNING: Unlocking the bootloader on Qualcomm devices may wipe user data if it was previously locked.\n\n"
+            "Ensure your device is in Fastboot mode before proceeding.\n\n"
+            "Do you wish to send the Fastboot unlock command now?"
+        ):
+            return
+        def _run():
+            ok, msg = self.ops.unlock_bootloader_fastboot()
+            if ok:
+                messagebox.showinfo("Bootloader Unlock", msg)
+            else:
+                messagebox.showerror("Unlock Error", msg)
+            self.refresh_device_status_async()
+        threading.Thread(target=_run, daemon=True).start()
+
     def _action_backup_partitions(self):
         def _run():
             info = self.adb.get_connected_device_info()
             slot = info.get("boot_slot", "_a")
             ok, msg = self.ops.backup_stock_partitions(slot=slot, partition_list=[f"boot{slot}", f"vbmeta{slot}"])
             if ok:
+                boot_candidate = os.path.join(os.getcwd(), "backups", f"stock_boot{slot}.img")
+                if os.path.exists(boot_candidate):
+                    self._selected_stock_boot = os.path.abspath(boot_candidate)
+                    def _update_ui():
+                        if hasattr(self, "lbl_stock_boot_status"):
+                            size_mb = os.path.getsize(self._selected_stock_boot) / (1024 * 1024)
+                            self.lbl_stock_boot_status.configure(
+                                text=f"Stock Boot: {self._selected_stock_boot} ({size_mb:.1f} MB) [Ready]",
+                                text_color="#38BDF8"
+                            )
+                    self.dispatch(_update_ui)
                 messagebox.showinfo("Backup Success", msg)
             else:
                 messagebox.showerror("Backup Failed", msg)
@@ -1736,6 +1968,177 @@ class MainWindow(ctk.CTk):
                 messagebox.showinfo("Full Backup Success", msg)
             else:
                 messagebox.showerror("Full Backup Failed", msg)
+        threading.Thread(target=_run, daemon=True).start()
+
+    def _action_browse_stock_boot(self):
+        img_path = filedialog.askopenfilename(title="Select Stock Boot Image (.img)", filetypes=[("Boot Image", "*.img")])
+        if img_path and os.path.exists(img_path):
+            self._selected_stock_boot = os.path.abspath(img_path)
+            size_mb = os.path.getsize(self._selected_stock_boot) / (1024 * 1024)
+            if hasattr(self, "lbl_stock_boot_status"):
+                self.lbl_stock_boot_status.configure(
+                    text=f"Stock Boot: {self._selected_stock_boot} ({size_mb:.1f} MB) [Ready]",
+                    text_color="#38BDF8"
+                )
+            self.append_log(f"Selected stock boot image: {self._selected_stock_boot} ({size_mb:.1f} MB)")
+
+    def _action_use_predumped_stock_boot(self):
+        found = self._find_backup_file("stock_boot_a.img", "stock_boot_b.img", "stock_boot.img")
+        if found:
+            self._selected_stock_boot = found
+            size_mb = os.path.getsize(found) / (1024 * 1024)
+            if hasattr(self, "lbl_stock_boot_status"):
+                self.lbl_stock_boot_status.configure(
+                    text=f"Stock Boot: {found} ({size_mb:.1f} MB) [Ready]",
+                    text_color="#38BDF8"
+                )
+            messagebox.showinfo("Pre-dumped Boot Loaded", f"Verified stock boot partition loaded from:\n{found} ({size_mb:.1f} MB)")
+            self.append_log(f"Loaded verified stock boot: {found}")
+        else:
+            messagebox.showwarning("Not Found", "No pre-dumped stock boot image found in backups/. Please dump from device or browse locally.")
+
+    def _action_install_magisk_and_push_boot(self):
+        base_dir = getattr(sys, '_MEIPASS', os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        assets_apk = os.path.join(base_dir, "assets", "magisk.apk")
+        if not os.path.exists(assets_apk):
+            assets_apk = filedialog.askopenfilename(title="Select Magisk APK", filetypes=[("APK Files", "*.apk")])
+            if not assets_apk:
+                return
+
+        boot_to_push = self._selected_stock_boot
+        if not boot_to_push or not os.path.exists(boot_to_push):
+            boot_to_push = self._find_backup_file("stock_boot_a.img", "stock_boot_b.img", "stock_boot.img")
+            if boot_to_push:
+                self._selected_stock_boot = boot_to_push
+
+        def _run():
+            ok_apk, msg_apk = self.ops.install_magisk_apk(assets_apk)
+            if not ok_apk:
+                messagebox.showerror("Magisk Install Failed", msg_apk)
+                return
+
+            if boot_to_push and os.path.exists(boot_to_push):
+                ok_push, msg_push = self.ops.push_boot_to_device(boot_to_push)
+                if ok_push:
+                    messagebox.showinfo(
+                        "Magisk & Boot Ready",
+                        f"1. Magisk APK installed successfully on device!\n"
+                        f"2. {msg_push}\n\n"
+                        f"Next: Tap 'Open Magisk App on Device' or use Screen Mirror to patch 'stock_boot.img' in Download."
+                    )
+                else:
+                    messagebox.showwarning("Boot Push Warning", f"Magisk installed, but pushing boot image failed:\n{msg_push}")
+            else:
+                messagebox.showinfo("Magisk Installed", f"{msg_apk}\n\nNote: Please select or dump a stock boot image in Step 2 to push it to device.")
+            self.refresh_device_status_async()
+        threading.Thread(target=_run, daemon=True).start()
+
+    def _action_launch_magisk(self):
+        def _run():
+            ok, msg = self.ops.launch_magisk_app()
+            if ok:
+                self.append_log(msg)
+            else:
+                messagebox.showwarning("Launch Magisk", msg)
+        threading.Thread(target=_run, daemon=True).start()
+
+    def _action_pull_patched_boot(self):
+        def _run():
+            ok, path, msg = self.ops.pull_latest_magisk_patched_boot()
+            if ok and path:
+                self._selected_patched_boot = path
+                size_mb = os.path.getsize(path) / (1024 * 1024)
+                def _update_ui():
+                    if hasattr(self, "lbl_patched_boot_status"):
+                        self.lbl_patched_boot_status.configure(
+                            text=f"Patched Boot: {path} ({size_mb:.1f} MB) [Ready to Flash]",
+                            text_color="#10B981"
+                        )
+                self.dispatch(_update_ui)
+                messagebox.showinfo("Patched Image Retrieved", f"{msg}\n\nReady for Step 5: Flash via Fastboot!")
+            else:
+                messagebox.showwarning("Patched Image Not Found", msg)
+        threading.Thread(target=_run, daemon=True).start()
+
+    def _action_use_predumped_patched_boot(self):
+        candidate = self._find_backup_file("magisk_patched_boot_a.img", "magisk_patched")
+        if candidate and os.path.exists(candidate):
+            self._selected_patched_boot = os.path.abspath(candidate)
+            size_mb = os.path.getsize(candidate) / (1024 * 1024)
+            if hasattr(self, "lbl_patched_boot_status"):
+                self.lbl_patched_boot_status.configure(
+                    text=f"Patched Boot: {candidate} ({size_mb:.1f} MB) [Ready to Flash]",
+                    text_color="#10B981"
+                )
+            messagebox.showinfo("Pre-Patched Image Loaded", f"Verified Magisk-patched boot image loaded:\n{candidate} ({size_mb:.1f} MB)\n\nReady to Flash in Step 5!")
+            self.append_log(f"Loaded verified pre-patched boot: {candidate}")
+        else:
+            messagebox.showwarning("Not Found", "No pre-patched boot image found in backups/. Please patch in Magisk (Step 4) or browse.")
+
+    def _action_browse_patched_boot(self):
+        img_path = filedialog.askopenfilename(title="Select Magisk-Patched Boot Image (.img)", filetypes=[("Patched Boot Image", "*.img")])
+        if img_path and os.path.exists(img_path):
+            self._selected_patched_boot = os.path.abspath(img_path)
+            size_mb = os.path.getsize(self._selected_patched_boot) / (1024 * 1024)
+            if hasattr(self, "lbl_patched_boot_status"):
+                self.lbl_patched_boot_status.configure(
+                    text=f"Patched Boot: {self._selected_patched_boot} ({size_mb:.1f} MB) [Ready to Flash]",
+                    text_color="#10B981"
+                )
+            self.append_log(f"Selected patched boot image: {self._selected_patched_boot} ({size_mb:.1f} MB)")
+
+    def _action_flash_patched_boot_wizard(self):
+        img_to_flash = self._selected_patched_boot
+        if not img_to_flash or not os.path.exists(img_to_flash):
+            candidate = self._find_backup_file("magisk_patched_boot_a.img", "magisk_patched")
+            if candidate and os.path.exists(candidate):
+                img_to_flash = os.path.abspath(candidate)
+                self._selected_patched_boot = img_to_flash
+            else:
+                img_to_flash = filedialog.askopenfilename(title="Select Magisk-Patched Boot Image (.img)", filetypes=[("Disk Image", "*.img")])
+                if not img_to_flash:
+                    return
+                self._selected_patched_boot = os.path.abspath(img_to_flash)
+
+        info = self.adb.get_connected_device_info()
+        slot = info.get("boot_slot", "_a")
+
+        if info["mode"] == "adb":
+            if not messagebox.askyesno(
+                "Reboot to Fastboot Required",
+                f"Your device is currently in standard Android ADB mode.\n\n"
+                f"Flashing requires Fastboot mode. Would you like to reboot to Fastboot now?\n\n"
+                f"(After device reboots to Fastboot, click Flash again)."
+            ):
+                return
+            self.ops.reboot_device("bootloader")
+            messagebox.showinfo("Rebooting to Fastboot", "Reboot command sent. Please wait ~10 seconds for the Fastboot screen, then click 'Flash Patched Boot & Reboot'.")
+            self.refresh_device_status_async()
+            return
+
+        if not messagebox.askyesno(
+            "Confirm Fastboot Flash",
+            f"Are you sure you want to flash:\n{img_to_flash}\n\nto slot {slot} via Fastboot and reboot?"
+        ):
+            return
+
+        def _run():
+            ok, msg = self.ops.flash_boot_image_fastboot(img_to_flash, slot=slot)
+            if ok:
+                messagebox.showinfo("Flash Success", f"{msg}\n\nDevice is booting into rooted Android!\nProceed to Step 6 to verify root access.")
+            else:
+                messagebox.showerror("Flash Failed", msg)
+            self.refresh_device_status_async()
+        threading.Thread(target=_run, daemon=True).start()
+
+    def _action_verify_root(self):
+        def _run():
+            ok, msg = self.ops.verify_root_access()
+            if ok:
+                messagebox.showinfo("Root Verification", f"🎉 CONGRATULATIONS!\n\n{msg}\n\nYour Onyx Boox C69HD is successfully rooted with Magisk!")
+            else:
+                messagebox.showwarning("Root Verification", f"{msg}\n\nIf you just flashed, please ensure the device has fully booted and Magisk setup is completed.")
+            self.refresh_device_status_async()
         threading.Thread(target=_run, daemon=True).start()
 
     def _action_install_magisk(self):
@@ -1755,37 +2158,36 @@ class MainWindow(ctk.CTk):
         threading.Thread(target=_run, daemon=True).start()
 
     def _action_flash_patched_boot(self):
-        img_path = filedialog.askopenfilename(title="Select Magisk-Patched Boot Image (.img)", filetypes=[("Disk Image", "*.img")])
-        if not img_path:
-            return
-
-        info = self.adb.get_connected_device_info()
-        slot = info.get("boot_slot", "_a")
-
-        if not messagebox.askyesno("Confirm Boot Flash", f"Are you sure you want to flash:\n{img_path}\nto slot {slot} via Fastboot?"):
-            return
-
-        def _run():
-            ok, msg = self.ops.flash_boot_image_fastboot(img_path, slot=slot)
-            if ok:
-                messagebox.showinfo("Flash Success", msg)
-            else:
-                messagebox.showerror("Flash Failed", msg)
-            self.refresh_device_status_async()
-        threading.Thread(target=_run, daemon=True).start()
+        self._action_flash_patched_boot_wizard()
 
     def _action_restore_stock_boot(self):
-        img_path = filedialog.askopenfilename(title="Select Stock Boot Image (.img)", filetypes=[("Disk Image", "*.img")])
+        found_stock = self._find_backup_file("stock_boot_a.img", "stock_boot_b.img", "stock_boot.img")
+        img_path = found_stock or filedialog.askopenfilename(title="Select Stock Boot Image (.img)", filetypes=[("Disk Image", "*.img")])
         if not img_path:
             return
 
         info = self.adb.get_connected_device_info()
         slot = info.get("boot_slot", "_a")
 
+        if info["mode"] == "adb":
+            if not messagebox.askyesno(
+                "Reboot to Fastboot Required",
+                f"Your device is currently in standard Android ADB mode.\n\n"
+                f"Restoring stock boot requires Fastboot mode. Reboot to Fastboot now?"
+            ):
+                return
+            self.ops.reboot_device("bootloader")
+            messagebox.showinfo("Rebooting to Fastboot", "Reboot command sent. Please wait ~10 seconds for the Fastboot screen, then click 'Restore Stock Boot' again.")
+            self.refresh_device_status_async()
+            return
+
+        if not messagebox.askyesno("Confirm Stock Restore", f"Are you sure you want to restore stock boot from:\n{img_path}\nto slot {slot} via Fastboot?"):
+            return
+
         def _run():
             ok, msg = self.ops.flash_boot_image_fastboot(img_path, slot=slot)
             if ok:
-                messagebox.showinfo("Stock Restored", msg)
+                messagebox.showinfo("Stock Restored", f"{msg}\n\nFactory stock boot restored. Device has rebooted to unrooted state.")
             else:
                 messagebox.showerror("Restore Failed", msg)
             self.refresh_device_status_async()

@@ -82,10 +82,28 @@ The **C69HD** (`C69_M_STAR`) has unique hardware characteristics:
   - 1-Click Restore stock Onyx animation.
   - Includes standalone CLI: `python scripts/generate_bootanimation.py --theme dark --fps 4 --preview --install`.
 
-### 9. 🛡️ Root & Partitions
-- **Stock Partition Backup**: Single or full dump of `boot`, `dtbo`, `recovery`, `vbmeta`, `vbmeta_system`, and `persist`.
-- **Magisk Root Workflow**: Install Magisk APK -> Reboot Fastboot -> Flash Patched Boot -> Restore Stock.
-- **Hardware Button Wake**: Install `c69hd-wake.zip` Magisk module to allow physical center and side keys to wake the device from sleep.
+### 9. 🛡️ Step-by-Step Root Wizard & Partitions (Turnkey & Foolproof)
+The tool features a dedicated 6-Step Root Wizard engineered to make rooting the Onyx Boox C69HD / Faust 5 intuitive and foolproof for any user:
+
+1. **Step 1: Prerequisites & Bootloader Check**
+   - Live dashboard detects active boot slot (`_a` or `_b`), bootloader status, and Superuser state.
+   - 1-Click **"Reboot to Fastboot"** and 1-Click **"Unlock Bootloader"** (`fastboot flashing unlock` / `oem unlock`). Factory bootloader on the Onyx Boox C69HD is unlocked by default (`unlocked:yes`).
+2. **Step 2: Obtain Stock Boot Image (`stock_boot.img`)**
+   - **1-Click Turnkey**: Click **"📥 Use Pre-dumped Stock Boot"** to instantly load the verified factory `stock_boot_a.img` (96 MB) bundled in `backups/`.
+   - Alternatively: Dump live partitions from device or browse for a local `.img`.
+3. **Step 3: Install Magisk App & Push Stock Boot to Device**
+   - 1-Click **"📲 Install Magisk & Push boot.img"** automatically installs `Magisk-v31.1.apk` on the device and transfers `stock_boot.img` into `/sdcard/Download/`.
+   - 1-Click **"📱 Open Magisk App on Device"** launches the Magisk app on the device screen (mirrorable via native desktop Scrcpy).
+4. **Step 4: Patch Boot in Magisk**
+   - Follow intuitive visual instructions: In Magisk, tap **Install** -> **Select and Patch a File** -> choose `Download/stock_boot.img` -> tap **LET'S GO**.
+   - 1-Click **"📥 Auto-Detect & Pull Patched Image to PC"** scans device storage, locates the new `magisk_patched_*.img`, and pulls it to your PC.
+   - **1-Click Turnkey**: Click **"⚡ Use Pre-Patched Image"** to skip manual patching and immediately use the verified, pre-tested `magisk_patched_boot_a.img`!
+5. **Step 5: Flash Patched Boot via Fastboot & Reboot**
+   - 1-Click **"⚡ Flash Patched Boot & Reboot"** safely switches the device to Fastboot if needed, flashes the patched boot to your active slot (`boot_a` / `boot_b`), and reboots into rooted Android.
+6. **Step 6: Verify Root Access & Post-Install Tweaks**
+   - 1-Click **"✔️ Verify Root Access"** runs `su -c 'id'` to confirm `uid=0(root)`.
+   - 1-Click **"⚡ Install c69hd-wake Magisk Module"** configures hardware key wakeup from deep sleep.
+   - 1-Click **"🚨 Emergency Stock Boot Restore"** reverts to 100% factory unrooted stock boot at any time.
 
 ### 10. 🔘 Hardware Button Remapper
 - Remap front button (`KEYCODE_BACK`):

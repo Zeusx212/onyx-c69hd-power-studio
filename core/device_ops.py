@@ -320,6 +320,70 @@ class DeviceOps:
             return True, "Boot image flashed successfully! Device is rebooting."
         return False, f"Fastboot flash failed: {err or out}"
 
+    def unlock_bootloader_fastboot(self):
+        """Attempts to unlock the bootloader in Fastboot mode."""
+        self.adb.log("Attempting Fastboot bootloader unlock...")
+        ok, out, err = self.adb.run_fastboot("flashing", "unlock")
+        if not ok:
+            ok, out, err = self.adb.run_fastboot("oem", "unlock")
+        if ok:
+            return True, "Bootloader unlock command sent successfully. If prompted on device screen, confirm using side keys."
+        return False, f"Bootloader unlock failed: {err or out}"
+
+    def push_boot_to_device(self, boot_img_path, dest_remote="/sdcard/Download/stock_boot.img"):
+        """Pushes a local stock boot.img to the device's Download folder ready for Magisk patching."""
+        if not os.path.exists(boot_img_path):
+            return False, f"Local boot image not found: {boot_img_path}"
+        self.adb.log(f"Pushing {boot_img_path} -> {dest_remote}...")
+        self.adb.run_shell("mkdir -p /sdcard/Download")
+        ok, out, err = self.adb.run_adb("push", boot_img_path, dest_remote)
+        if ok:
+            return True, f"Stock boot image pushed to {dest_remote} on device."
+        return False, f"Failed to push boot image: {err or out}"
+
+    def pull_latest_magisk_patched_boot(self, dest_dir=None):
+        """
+        Finds the newest magisk_patched_*.img on the device in /sdcard/Download/ or /sdcard/,
+        and pulls it to the local backups directory.
+        """
+        if not dest_dir:
+            dest_dir = os.path.join(os.getcwd(), "backups")
+        os.makedirs(dest_dir, exist_ok=True)
+
+        self.adb.log("Scanning device for Magisk-patched boot images...")
+        ok, out, err = self.adb.run_shell(
+            "ls -t /sdcard/Download/magisk_patched*.img /sdcard/magisk_patched*.img 2>/dev/null"
+        )
+        if not ok or not out.strip():
+            return False, None, "No Magisk-patched boot images found in /sdcard/Download/ yet. Please patch stock_boot.img in the Magisk app first."
+
+        candidate = out.strip().splitlines()[0].strip()
+        filename = os.path.basename(candidate)
+        local_dest = os.path.join(dest_dir, filename)
+
+        self.adb.log(f"Found patched image: {candidate} -> Pulling to {local_dest}...")
+        ok_pull, _, err_pull = self.adb.run_adb("pull", candidate, local_dest)
+        if ok_pull and os.path.exists(local_dest):
+            size_mb = os.path.getsize(local_dest) / (1024 * 1024)
+            return True, local_dest, f"Successfully pulled {filename} ({size_mb:.1f} MB) to:\n{local_dest}"
+        return False, None, f"Failed to pull patched boot image: {err_pull}"
+
+    def launch_magisk_app(self):
+        """Launches the Magisk application on the device screen."""
+        self.adb.log("Launching Magisk app on device...")
+        ok, out, err = self.adb.run_shell("monkey -p com.topjohnwu.magisk -c android.intent.category.LAUNCHER 1")
+        if ok:
+            return True, "Magisk app opened on device screen."
+        return False, f"Could not launch Magisk app: {err or out}"
+
+    def verify_root_access(self):
+        """Checks if device has working root access with uid=0."""
+        self.adb.log("Verifying root access (su check)...")
+        ok, out, err = self.adb.run_shell("su -c 'id'")
+        if ok and "uid=0" in out:
+            return True, f"Root verified! Superuser active: {out.strip()}"
+        return False, f"Device is not rooted or su permission denied: {out or err}"
+
     def install_magisk_wake_module(self, zip_path):
         if not os.path.exists(zip_path):
             return False, f"Module zip not found: {zip_path}"
