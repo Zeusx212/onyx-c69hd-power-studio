@@ -42,9 +42,9 @@ class ADBManager:
             "version": self._version or "Unknown"
         }
 
-    def install_tools(self, progress_callback=None):
+    def install_tools(self, progress_callback=None, systemwide=True):
         """Downloads and sets up official platform tools."""
-        ok, adb, fb, ver = install_platform_tools(progress_callback=progress_callback)
+        ok, adb, fb, ver = install_platform_tools(progress_callback=progress_callback, systemwide=systemwide)
         if ok:
             self.adb_bin = adb
             self.fastboot_bin = fb

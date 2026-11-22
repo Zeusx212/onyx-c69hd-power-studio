@@ -1003,7 +1003,7 @@ class MainWindow(ctk.CTk):
         self.opt_long_press.pack(anchor="w", padx=18, pady=(0, 12))
 
         ctk.CTkLabel(c_config, text="Short-Press (Single Tap) Action:", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold")).pack(anchor="w", padx=18, pady=(4, 4))
-        self.opt_short_press = ctk.CTkOptionMenu(c_config, height=36, corner_radius=8, values=["Standard Back Key Event [Recommended] []", "Recent Apps / App Switcher [KEYCODE_APP_SWITCH]", "Full Screen E-Ink Refresh (Clears Ghosting) [fullRefreshScreen]", "Take Screenshot [screenshot]", "Return to Home Screen [back_to_home]"], width=550)
+        self.opt_short_press = ctk.CTkOptionMenu(c_config, height=36, corner_radius=8, values=["Standard Back Key Event [Recommended] []", "Recent Apps / App Switcher [KEYCODE_APP_SWITCH]", "Power / Sleep Screen [KEYCODE_POWER]", "Full Screen E-Ink Refresh (Clears Ghosting) [fullRefreshScreen]", "Take Screenshot [screenshot]", "Return to Home Screen [back_to_home]"], width=550)
         self.opt_short_press.set("Standard Back Key Event [Recommended] []")
         self.opt_short_press.pack(anchor="w", padx=18, pady=(0, 16))
 
@@ -1320,7 +1320,7 @@ class MainWindow(ctk.CTk):
 
         ctk.CTkButton(
             env_btn_box,
-            text="📥 Auto-Install / Update Platform-Tools",
+            text="📥 Auto-Install Systemwide ADB",
             height=30,
             corner_radius=6,
             fg_color=self.COLOR_GREEN,
@@ -1331,7 +1331,7 @@ class MainWindow(ctk.CTk):
 
         ctk.CTkButton(
             env_btn_box,
-            text="🌐 Register ADB in Windows PATH",
+            text="🌐 Register System-Wide PATH",
             height=30,
             corner_radius=6,
             fg_color="#283042",
@@ -1411,15 +1411,21 @@ class MainWindow(ctk.CTk):
         if hasattr(self, "lbl_adb_env"):
             tool_info = self.adb.get_tool_info()
             if tool_info["installed"]:
+                from core.adb_installer import check_path_status
+                adb_dir = os.path.dirname(tool_info["adb_path"]) if tool_info["adb_path"] else ""
+                st = check_path_status(adb_dir) if adb_dir else {"in_system_path": False, "in_user_path": False}
+                sys_tag = "System-wide [✓]" if st["in_system_path"] else "System-wide [ ]"
+                usr_tag = "User PATH [✓]" if st["in_user_path"] else "User PATH [ ]"
                 self.lbl_adb_env.configure(
                     text=f"Status   : Installed & Verified (Version: {tool_info['version']})\n"
                          f"ADB      : {tool_info['adb_path']}\n"
-                         f"Fastboot : {tool_info['fastboot_path']}"
+                         f"Fastboot : {tool_info['fastboot_path']}\n"
+                         f"PATH     : {sys_tag}  |  {usr_tag}"
                 )
             else:
                 self.lbl_adb_env.configure(
                     text="Status   : Missing ADB & Fastboot executables\n"
-                         "Action   : Click 'Auto-Install Platform-Tools' below to auto-download official Google binaries."
+                         "Action   : Click 'Auto-Install Systemwide ADB' below to auto-download official Google binaries."
                 )
 
         if not self.adb.is_available():
@@ -2181,18 +2187,30 @@ class MainWindow(ctk.CTk):
         threading.Thread(target=_worker, daemon=True).start()
 
     def _action_register_adb_path(self):
-        """Registers the current ADB directory into the Windows User PATH environment variable."""
-        from core.adb_installer import add_directory_to_user_path
+        """Registers the current ADB directory into Windows System-wide and User PATH environment variables."""
+        from core.adb_installer import add_directory_to_system_path, check_path_status
         adb_dir = os.path.dirname(self.adb.adb_bin)
         if not os.path.isdir(adb_dir):
             messagebox.showwarning("Register PATH", "No valid platform-tools directory found. Please run Auto-Install first.")
             return
-        ok = add_directory_to_user_path(adb_dir)
+        ok, msg = add_directory_to_system_path(adb_dir, elevate_if_needed=True)
+        st = check_path_status(adb_dir)
+        sys_status = "Active [✓]" if st["in_system_path"] else "Not Elevated / Pending [ ]"
+        usr_status = "Active [✓]" if st["in_user_path"] else "Not Active [ ]"
+
+        detail = (
+            f"{msg}\n\n"
+            f"• Target Folder   : {adb_dir}\n"
+            f"• System-wide PATH: {sys_status}\n"
+            f"• User Environment: {usr_status}\n\n"
+            "An environment broadcast notification has been sent across Windows."
+        )
         if ok:
-            messagebox.showinfo("PATH Updated", f"Successfully registered in Windows User PATH:\n{adb_dir}\n\nA broadcast notification has been sent to running applications.")
-            self.append_log(f"Registered {adb_dir} in User PATH")
+            messagebox.showinfo("PATH Registered", detail)
+            self.append_log(f"Registered {adb_dir} in PATH: {msg}")
+            self.refresh_device_status_async()
         else:
-            messagebox.showerror("PATH Update Failed", "Failed to write to User PATH registry (HKCU\\Environment\\Path).")
+            messagebox.showerror("PATH Registration Failed", f"Failed to register PATH:\n{msg}")
 
     def _action_open_tools_folder(self):
         """Opens Windows Explorer at the platform-tools directory."""

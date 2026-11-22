@@ -92,10 +92,25 @@ class TestDeviceOps(unittest.TestCase):
 
     def test_side_button_mapping_and_presets(self):
         # 1. Test preset catalog integrity
-        self.assertTrue(len(SIDE_BUTTON_PRESETS) >= 7)
-        self.assertTrue(len(SIDE_BUTTON_KEYCODES) >= 15)
+        self.assertTrue(len(SIDE_BUTTON_PRESETS) >= 11)
+        self.assertTrue(len(SIDE_BUTTON_KEYCODES) >= 18)
         self.assertIn("none", SIDE_BUTTON_LONG_ACTIONS)
+        self.assertIn("power", SIDE_BUTTON_LONG_ACTIONS)
         self.assertIn("fullRefreshScreen", SIDE_BUTTON_LONG_ACTIONS)
+        self.assertIn("KEYCODE_POWER", BUTTON_ACTIONS)
+
+        # Check Power/Sleep presets exist
+        preset_ids = [p["id"] for p in SIDE_BUTTON_PRESETS]
+        self.assertIn("POWER_PAGE", preset_ids)
+        self.assertIn("PAGE_POWER", preset_ids)
+        self.assertIn("POWER_SLEEP", preset_ids)
+        self.assertIn("POWER_BACK", preset_ids)
+
+        # Check Power/Sleep keycodes exist
+        kc_names = [k[0] for k in SIDE_BUTTON_KEYCODES]
+        self.assertIn("POWER", kc_names)
+        self.assertIn("SLEEP", kc_names)
+        self.assertIn("WAKEUP", kc_names)
 
         # 2. Test query parsing with mock output
         mock_kl = (
@@ -140,6 +155,22 @@ class TestDeviceOps(unittest.TestCase):
         ok_reset, msg_reset = self.ops.reset_side_button_mapping()
         self.assertTrue(ok_reset)
         self.assertIn("PAGE_UP / PAGE_DOWN", msg_reset)
+
+    def test_power_sleep_side_mapping(self):
+        # Verify that POWER and SLEEP keys generate WAKE flag in gpio-keys.kl
+        self.adb.run_shell.side_effect = None
+        self.adb.run_shell.return_value = (True, "", "")
+        ok, msg = self.ops.apply_side_button_mapping(
+            top_key="POWER",
+            bottom_key="SLEEP",
+            top_long="power",
+            bottom_long="none"
+        )
+        self.assertTrue(ok)
+        calls = [str(c[0][0]) for c in self.adb.run_shell.call_args_list]
+        kl_call = [c for c in calls if "gpio-keys.kl" in c][0]
+        self.assertIn("key 104   POWER WAKE", kl_call)
+        self.assertIn("key 109   SLEEP WAKE", kl_call)
 
     def test_debloat_catalog_integrity(self):
         self.assertTrue(len(DEBLOAT_CATALOG) >= 3)
@@ -255,6 +286,33 @@ class TestADBInstaller(unittest.TestCase):
         default_dir = get_default_install_dir()
         self.assertTrue(os.path.isabs(default_dir))
         self.assertTrue(default_dir.endswith("platform-tools"))
+
+    def test_adb_installer_helpers(self):
+        from core.adb_installer import (
+            kill_adb_processes,
+            check_path_status,
+            get_default_install_dir,
+            is_admin
+        )
+        # 1. kill_adb_processes should run safely
+        kill_adb_processes()
+
+        # 2. check_path_status returns expected keys
+        status = check_path_status(r"C:\platform-tools" if sys.platform == "win32" else "/usr/local/bin")
+        self.assertIn("in_user_path", status)
+        self.assertIn("in_system_path", status)
+        self.assertIn("in_process_path", status)
+
+        # 3. get_default_install_dir with systemwide True vs False
+        sys_dir = get_default_install_dir(systemwide=True)
+        user_dir = get_default_install_dir(systemwide=False)
+        self.assertTrue(os.path.isabs(sys_dir))
+        self.assertTrue(os.path.isabs(user_dir))
+        if sys.platform == "win32":
+            self.assertEqual(sys_dir, r"C:\platform-tools")
+
+        # 4. is_admin returns a bool
+        self.assertIsInstance(is_admin(), bool)
 
     def test_adb_manager_availability(self):
         adb = ADBManager()

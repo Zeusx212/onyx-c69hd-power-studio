@@ -139,20 +139,6 @@ Onyx Boox C69HD Power Studio is fully cross-platform and runs natively on **Linu
 
 ---
 
-## 🌐 Cross-Platform Porting: Linux & macOS
-
-Onyx Boox C69HD Power Studio is fully cross-platform and runs natively on **Linux (x86_64 / arm64)**, **macOS (Apple Silicon M1-M4 & Intel x86_64)**, and **Windows 10/11**:
-
-- **Native Linux & macOS Launchers**: Run `./run_gui.sh` — automatically verifies Python 3, Tkinter (`python3-tk`), and virtualenv dependencies.
-- **Native Package Manager ADB Setup**: Run `./install_adb.sh` — auto-detects Homebrew on macOS (`brew install android-platform-tools scrcpy`), APT on Debian/Ubuntu (`sudo apt install adb fastboot scrcpy`), DNF on Fedora, or Pacman on Arch.
-- **Cross-Platform Image Pasteboard**: High-fidelity clipboard image copy via native macOS AppleScript pasteboard and Linux Wayland (`wl-copy`) / X11 (`xclip`).
-- **Native Standalone Builds**:
-  - Linux: `./build_linux.sh` -> packages standalone directory into `dist/Onyx_C69HD_Power_Studio_linux_x64.tar.gz`.
-  - macOS: `./build_mac.sh` -> creates a native macOS `.app` bundle into `dist/Onyx_C69HD_Power_Studio_macOS.zip`.
-- **Automated CI/CD Release Pipeline**: GitHub Actions workflow (`.github/workflows/build.yml`) continuously builds and releases native binaries across Windows, Linux, and macOS.
-
----
-
 ## 🚀 How to Run
 
 ### Requirements

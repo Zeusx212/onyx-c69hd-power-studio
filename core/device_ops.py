@@ -21,6 +21,7 @@ except ImportError:
 # Available button mapping actions identified from Onyx ROM analysis
 BUTTON_ACTIONS = {
     "KEYCODE_APP_SWITCH": "Recent Apps / App Switcher (Recommended for C69HD)",
+    "KEYCODE_POWER": "Power / Sleep Screen (Turn Screen Off / Standby)",
     "fullRefreshScreen": "Full Screen E-Ink Refresh (Clears Ghosting)",
     "screenshot": "Take Screenshot",
     "showRefreshModeDialog": "Open E-Ink Refresh Mode Dialog",
@@ -34,6 +35,9 @@ BUTTON_ACTIONS = {
 SIDE_BUTTON_KEYCODES = [
     ("PAGE_UP", "PAGE_UP (Previous Page / Scroll Up)"),
     ("PAGE_DOWN", "PAGE_DOWN (Next Page / Scroll Down)"),
+    ("POWER", "POWER (Sleep / Screen Off / Wake / Power Menu)"),
+    ("SLEEP", "SLEEP (Put Device into Standby / Sleep)"),
+    ("WAKEUP", "WAKEUP (Wake Screen from Standby)"),
     ("VOLUME_UP", "VOLUME_UP (Kindle, Moon+, Koreader Previous)"),
     ("VOLUME_DOWN", "VOLUME_DOWN (Kindle, Moon+, Koreader Next)"),
     ("DPAD_UP", "DPAD_UP (Up Navigation / Scroll)"),
@@ -67,6 +71,34 @@ SIDE_BUTTON_PRESETS = [
         "top": "VOLUME_UP",
         "bottom": "VOLUME_DOWN",
         "desc": "Recommended for Kindle, Moon+ Reader, Mihon/Tachiyomi, Librera, and KOReader."
+    },
+    {
+        "id": "POWER_PAGE",
+        "name": "⚡ Power + Page Turn: Top = POWER, Bottom = PAGE_DOWN",
+        "top": "POWER",
+        "bottom": "PAGE_DOWN",
+        "desc": "Top button acts as Sleep/Power/Wake button; bottom button turns page forward."
+    },
+    {
+        "id": "PAGE_POWER",
+        "name": "⚡ Page Turn + Power: Top = PAGE_UP, Bottom = POWER",
+        "top": "PAGE_UP",
+        "bottom": "POWER",
+        "desc": "Top button turns page back; bottom button acts as Sleep/Power/Wake button."
+    },
+    {
+        "id": "POWER_SLEEP",
+        "name": "💤 Dual Power & Sleep: Top = POWER, Bottom = SLEEP",
+        "top": "POWER",
+        "bottom": "SLEEP",
+        "desc": "Dedicated hardware buttons for screen sleep/wake and standby."
+    },
+    {
+        "id": "POWER_BACK",
+        "name": "⚡ Power + Back: Top = POWER, Bottom = BACK",
+        "top": "POWER",
+        "bottom": "BACK",
+        "desc": "Top button toggles Power/Sleep; bottom button returns Back."
     },
     {
         "id": "INVERTED_PAGE_TURN",
@@ -115,6 +147,7 @@ SIDE_BUTTON_PRESETS = [
 # Side button long-press actions supported by Onyx framework
 SIDE_BUTTON_LONG_ACTIONS = {
     "none": "No Action (Standard Hardware Press)",
+    "power": "Sleep / Power Off Screen",
     "fullRefreshScreen": "Full Screen E-Ink Refresh (Clears Ghosting)",
     "screenshot": "Take Screenshot",
     "toggleA2": "Toggle A2 High-Speed Refresh Mode",
@@ -420,6 +453,13 @@ class DeviceOps:
         self.adb.log(f"Applying side button remap: Top='{top_key}', Bottom='{bottom_key}', TopLong='{top_long}', BotLong='{bottom_long}'")
 
         # 1. Generate compliant gpio-keys.kl
+        # For POWER, SLEEP, WAKEUP keys, append WAKE flag so physical button can wake device from standby
+        def _format_kl_key(scancode, keycode):
+            kc = keycode.strip().upper()
+            if kc in ("POWER", "SLEEP", "WAKEUP"):
+                return f"key {scancode:<5} {kc} WAKE\n"
+            return f"key {scancode:<5} {kc}\n"
+
         kl_content = (
             "# Onyx Boox C69HD Remapped Keylayout\n"
             "key 115   VOLUME_UP\n"
@@ -427,8 +467,8 @@ class DeviceOps:
             "key 102   HOME\n"
             "key 528   FOCUS\n"
             "key 766   CAMERA\n"
-            f"key 104   {top_key}\n"
-            f"key 109   {bottom_key}\n"
+            + _format_kl_key(104, top_key)
+            + _format_kl_key(109, bottom_key)
         )
 
         # 2. Write to Magisk module for persistent systemless overlay across reboots
