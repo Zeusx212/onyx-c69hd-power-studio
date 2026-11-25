@@ -241,10 +241,11 @@ class TestDeviceOps(unittest.TestCase):
 
     def test_unlock_bootloader_fastboot(self):
         # 1. Success on flashing unlock
+        self.adb.get_fastboot_var.return_value = "no"
         self.adb.run_fastboot.return_value = (True, "OKAY", "")
         ok, msg = self.ops.unlock_bootloader_fastboot()
         self.assertTrue(ok)
-        self.adb.run_fastboot.assert_called_with("flashing", "unlock")
+        self.adb.run_fastboot.assert_called_with("flashing", "unlock", timeout=60)
 
         # 2. Fallback to oem unlock
         self.adb.run_fastboot.side_effect = [
@@ -298,7 +299,7 @@ class TestDeviceOps(unittest.TestCase):
             self.adb.run_shell.return_value = (True, "/sdcard/Download/magisk_patched_25200_abcde.img\n", "")
             
             # Simulate pull creating local file
-            def mock_pull(*args):
+            def mock_pull(*args, **kwargs):
                 dest = args[2]
                 with open(dest, "wb") as f:
                     f.write(b"MOCK_PATCHED_BOOT_BYTES" * 100)
@@ -345,11 +346,12 @@ class TestDeviceOps(unittest.TestCase):
         with open(test_file, "wb") as f:
             f.write(b"MOCK_RECOVERY_IMAGE_DATA")
         try:
+            self.adb.get_fastboot_var.return_value = "yes"
             self.adb.run_fastboot.return_value = (True, "booting...", "")
             ok, msg = self.ops.boot_recovery_fastboot(test_file)
             self.assertTrue(ok)
             self.assertIn("tether-booting", msg)
-            self.adb.run_fastboot.assert_called_with("boot", test_file)
+            self.adb.run_fastboot.assert_called_with("boot", test_file, timeout=60)
 
             # 3. Fastboot boot failure
             self.adb.run_fastboot.return_value = (False, "", "FAILED (remote: unknown command)")
@@ -359,6 +361,92 @@ class TestDeviceOps(unittest.TestCase):
         finally:
             if os.path.exists(test_file):
                 os.remove(test_file)
+
+    def test_ensure_fastboot_mode_and_twrp_root_flows(self):
+        # 1. Wireless ADB should be rejected for Fastboot
+        self.adb.get_device_mode.return_value = ("adb", "192.168.1.50:5555", True)
+        ok, msg = self.ops.ensure_fastboot_mode(auto_reboot=True)
+        self.assertFalse(ok)
+        self.assertIn("Wireless ADB", msg)
+
+        # 2. USB ADB -> reboot bootloader -> wait_for_mode("fastboot")
+        self.adb.get_device_mode.return_value = ("adb", "ABC123", False)
+        self.adb.run_adb.return_value = (True, "", "")
+        self.adb.wait_for_mode.return_value = (True, "fastboot", "ABC123")
+        ok, msg = self.ops.ensure_fastboot_mode(auto_reboot=True)
+        self.assertTrue(ok)
+        self.adb.run_adb.assert_called_with("reboot", "bootloader")
+
+        # 3. Backup partitions in TWRP recovery mode (no su needed)
+        test_out_dir = os.path.join(BASE_DIR, "tests", "_test_twrp_backup")
+        os.makedirs(test_out_dir, exist_ok=True)
+        try:
+            self.adb.get_device_mode.return_value = ("recovery", "ABC123", False)
+            self.adb.run_shell.side_effect = [
+                (True, "uid=0(root) gid=0(root)", ""),
+                (True, "", ""),
+                (True, "", ""),
+            ]
+            def mock_pull(*args, **kwargs):
+                dest = args[2]
+                with open(dest, "wb") as f:
+                    f.write(b"STOCK_BOOT_BYTES" * 16)
+                return True, "1 file pulled", ""
+            self.adb.run_adb.side_effect = mock_pull
+            ok, msg = self.ops.backup_stock_partitions(slot="_a", dest_dir=test_out_dir, partition_list=["boot_a"])
+            self.assertTrue(ok)
+            self.assertTrue(os.path.exists(os.path.join(test_out_dir, "stock_boot_a.img")))
+        finally:
+            self.adb.run_shell.side_effect = None
+            self.adb.run_adb.side_effect = None
+            shutil.rmtree(test_out_dir, ignore_errors=True)
+
+        # 4. Install Magisk via TWRP
+        test_apk = os.path.join(BASE_DIR, "tests", "_test_magisk.apk")
+        with open(test_apk, "wb") as f:
+            f.write(b"PK\x03\x04MOCK_MAGISK_ZIP")
+        try:
+            self.adb.get_device_mode.return_value = ("recovery", "ABC123", False)
+            self.adb.run_adb.return_value = (True, "pushed", "")
+            self.adb.run_shell.return_value = (True, "Done installing /tmp/Magisk.zip", "")
+            ok, msg = self.ops.install_magisk_via_twrp(test_apk, reboot_to_system=True)
+            self.assertTrue(ok)
+            self.assertIn("TWRP", msg)
+        finally:
+            if os.path.exists(test_apk):
+                os.remove(test_apk)
+
+    def test_adb_manager_fastboot_stderr_and_recovery_mode(self):
+        adb = ADBManager()
+        # Fastboot getvar writes to stderr
+        with patch.object(adb, "run_fastboot", return_value=(True, "", "current-slot: b\nFinished. Total time: 0.01s")):
+            self.assertEqual(adb.get_fastboot_var("current-slot"), "b")
+
+        # Recovery mode detected from adb devices
+        with patch.object(adb, "run_adb", return_value=(True, "List of devices attached\nSERIAL123\trecovery\n", "")):
+            mode, serial, is_w = adb.get_device_mode()
+            self.assertEqual(mode, "recovery")
+            self.assertEqual(serial, "SERIAL123")
+            self.assertFalse(is_w)
+
+        # Fastboot mode full probe parses stderr slot & unlocked=no
+        with patch.object(adb, "run_adb", return_value=(True, "List of devices attached\n", "")):
+            def mock_fb(*args, **kwargs):
+                if args[0] == "devices":
+                    return (True, "SERIAL123\tfastboot", "")
+                if args[:2] == ("getvar", "current-slot"):
+                    return (True, "", "current-slot: b\nFinished.")
+                if args[:2] == ("getvar", "unlocked"):
+                    return (True, "", "unlocked: no\nFinished.")
+                if args[:2] == ("getvar", "is-userspace"):
+                    return (True, "", "is-userspace: no\nFinished.")
+                return (False, "", "")
+            with patch.object(adb, "run_fastboot", side_effect=mock_fb):
+                info = adb.get_connected_device_info()
+                self.assertTrue(info["connected"])
+                self.assertEqual(info["mode"], "fastboot")
+                self.assertEqual(info["boot_slot"], "_b")
+                self.assertFalse(info["unlocked"])
 
     def test_flash_recovery_fastboot(self):
         # 1. Missing file

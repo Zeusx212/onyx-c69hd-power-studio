@@ -882,32 +882,27 @@ class MainWindow(ctk.CTk):
     def _create_page_root(self):
         page = ctk.CTkScrollableFrame(self.content_container, fg_color="transparent")
 
-        lbl_h = ctk.CTkLabel(page, text="🛡️ Magisk Rooting & Partition Studio", font=ctk.CTkFont(family="Segoe UI", size=22, weight="bold"), text_color="#FFFFFF")
+        lbl_h = ctk.CTkLabel(page, text="🛡️ Root & Custom Recovery Studio", font=ctk.CTkFont(family="Segoe UI", size=22, weight="bold"), text_color="#FFFFFF")
         lbl_h.pack(anchor="w", pady=(0, 4))
-        lbl_sub = ctk.CTkLabel(page, text="Interactive, step-by-step guided workflow to safely backup stock partitions, patch boot with Magisk, and gain full root.", font=ctk.CTkFont(family="Segoe UI", size=12), text_color=self.COLOR_TEXT_MUTED)
-        lbl_sub.pack(anchor="w", pady=(0, 16))
+        lbl_sub = ctk.CTkLabel(page, text="Automated, step-by-step workflow for bootloader unlock, TWRP tether-boot/flashing, stock backup, and Magisk rooting.", font=ctk.CTkFont(family="Segoe UI", size=12), text_color=self.COLOR_TEXT_MUTED)
+        lbl_sub.pack(anchor="w", pady=(0, 14))
 
         # ==========================================
-        # TOP STATUS DASHBOARD
+        # TOP LIVE TELEMETRY & QUICK REBOOT BAR
         # ==========================================
         c_status = ctk.CTkFrame(page, corner_radius=12, fg_color="#101522", border_width=1, border_color="#1F2A3E")
         c_status.pack(fill="x", pady=(0, 10))
 
         stat_head = ctk.CTkFrame(c_status, fg_color="transparent")
-        stat_head.pack(fill="x", padx=16, pady=(12, 4))
-        ctk.CTkLabel(stat_head, text="📊 Live Device & Root Status Dashboard", font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"), text_color=self.COLOR_CYAN).pack(side="left")
+        stat_head.pack(fill="x", padx=16, pady=(12, 6))
+        ctk.CTkLabel(stat_head, text="📊 Live Device & Mode Dashboard", font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"), text_color=self.COLOR_CYAN).pack(side="left")
 
-        ctk.CTkButton(
-            stat_head,
-            text="🔄 Refresh",
-            width=80,
-            height=26,
-            corner_radius=6,
-            fg_color="#1E293B",
-            hover_color="#334155",
-            font=ctk.CTkFont(family="Segoe UI", size=11),
-            command=self.refresh_device_status_async
-        ).pack(side="right")
+        btn_bar = ctk.CTkFrame(stat_head, fg_color="transparent")
+        btn_bar.pack(side="right")
+        ctk.CTkButton(btn_bar, text="🔄 Refresh", width=78, height=26, corner_radius=6, fg_color="#1E293B", hover_color="#334155", font=ctk.CTkFont(family="Segoe UI", size=11), command=self.refresh_device_status_async).pack(side="left", padx=(0, 6))
+        ctk.CTkButton(btn_bar, text="📱 System", width=74, height=26, corner_radius=6, fg_color="#1E293B", hover_color="#334155", font=ctk.CTkFont(family="Segoe UI", size=11), command=lambda: self._action_reboot_target("system")).pack(side="left", padx=(0, 6))
+        ctk.CTkButton(btn_bar, text="⚡ Fastboot", width=80, height=26, corner_radius=6, fg_color="#283042", hover_color="#3B4660", font=ctk.CTkFont(family="Segoe UI", size=11), command=lambda: self._action_reboot_target("bootloader")).pack(side="left", padx=(0, 6))
+        ctk.CTkButton(btn_bar, text="🛠️ Recovery", width=84, height=26, corner_radius=6, fg_color="#283042", hover_color="#3B4660", font=ctk.CTkFont(family="Segoe UI", size=11), command=self._action_reboot_recovery).pack(side="left")
 
         self.lbl_root_wizard_status = ctk.CTkLabel(
             c_status,
@@ -916,10 +911,19 @@ class MainWindow(ctk.CTk):
             text_color="#E2E8F0",
             justify="left"
         )
-        self.lbl_root_wizard_status.pack(anchor="w", padx=16, pady=(0, 12))
+        self.lbl_root_wizard_status.pack(anchor="w", padx=16, pady=(0, 6))
+
+        self.lbl_root_progress = ctk.CTkLabel(
+            c_status,
+            text="Ready — Connect your Onyx Boox C69HD via USB cable with USB Debugging enabled.",
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            text_color="#38BDF8",
+            justify="left"
+        )
+        self.lbl_root_progress.pack(anchor="w", padx=16, pady=(0, 12))
 
         # ==========================================
-        # STEP 1: PREREQUISITES & BOOTLOADER UNLOCK
+        # STEP 1: BOOTLOADER CHECK & UNLOCK
         # ==========================================
         c1 = ctk.CTkFrame(page, corner_radius=12, fg_color=self.COLOR_CARD, border_width=1, border_color=self.COLOR_CARD_BORDER)
         c1.pack(fill="x", pady=6)
@@ -927,12 +931,12 @@ class MainWindow(ctk.CTk):
         h1 = ctk.CTkFrame(c1, fg_color="transparent")
         h1.pack(anchor="w", padx=18, pady=(14, 4))
         ctk.CTkLabel(h1, text="STEP 1", font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"), fg_color="#1E293B", text_color=self.COLOR_CYAN, corner_radius=6, padx=8, pady=2).pack(side="left", padx=(0, 10))
-        ctk.CTkLabel(h1, text="Bootloader Unlock Check & Fastboot Reboot", font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"), text_color="#FFFFFF").pack(side="left")
+        ctk.CTkLabel(h1, text="Bootloader Unlock Check (Required Once)", font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"), text_color="#FFFFFF").pack(side="left")
 
         ctk.CTkLabel(
             c1,
-            text="Flashing custom or Magisk-patched boot partitions requires an unlocked bootloader.\n"
-                 "The Onyx Boox C69HD typically comes factory unlocked. If locked, enter Fastboot mode and unlock below.",
+            text="Custom TWRP and Magisk require an unlocked bootloader (enable 'OEM Unlocking' in Developer Options if locked).\n"
+                 "Clicking below automatically reboots to Fastboot, waits for USB detection, and checks/unlocks the bootloader.",
             font=ctk.CTkFont(family="Segoe UI", size=11),
             text_color=self.COLOR_TEXT_MUTED,
             justify="left"
@@ -941,12 +945,11 @@ class MainWindow(ctk.CTk):
         b_row1 = ctk.CTkFrame(c1, fg_color="transparent")
         b_row1.pack(anchor="w", padx=18, pady=(0, 14))
 
-        ctk.CTkButton(b_row1, text="⚡ 1. Reboot to Fastboot Mode", height=34, corner_radius=8, fg_color="#283042", hover_color="#3B4660", command=lambda: self.ops.reboot_device("bootloader")).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(b_row1, text="🔓 2. Unlock Bootloader (Fastboot)", height=34, corner_radius=8, fg_color="#1E293B", hover_color="#334155", command=self._action_unlock_bootloader).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(b_row1, text="🔄 Return to Android System", height=34, corner_radius=8, fg_color="#131926", hover_color="#1F293D", command=lambda: self.ops.reboot_device("system")).pack(side="left")
+        ctk.CTkButton(b_row1, text="🔓 1-Click: Auto-Check & Unlock Bootloader", height=34, corner_radius=8, fg_color=self.COLOR_BLUE, hover_color="#2563EB", font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"), command=self._action_unlock_bootloader).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(b_row1, text="🔄 Reboot to Android System", height=34, corner_radius=8, fg_color="#131926", hover_color="#1F293D", command=lambda: self._action_reboot_target("system")).pack(side="left")
 
         # ==========================================
-        # STEP 2: OBTAIN STOCK BOOT IMAGE
+        # STEP 2: CUSTOM TWRP RECOVERY STUDIO
         # ==========================================
         c2 = ctk.CTkFrame(page, corner_radius=12, fg_color=self.COLOR_CARD, border_width=1, border_color=self.COLOR_CARD_BORDER)
         c2.pack(fill="x", pady=6)
@@ -954,28 +957,71 @@ class MainWindow(ctk.CTk):
         h2 = ctk.CTkFrame(c2, fg_color="transparent")
         h2.pack(anchor="w", padx=18, pady=(14, 4))
         ctk.CTkLabel(h2, text="STEP 2", font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"), fg_color="#1E293B", text_color=self.COLOR_CYAN, corner_radius=6, padx=8, pady=2).pack(side="left", padx=(0, 10))
-        ctk.CTkLabel(h2, text="Obtain Stock Boot Image (stock_boot.img)", font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"), text_color="#FFFFFF").pack(side="left")
+        ctk.CTkLabel(h2, text="Boot or Flash Custom TWRP 11.0 Recovery", font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"), text_color="#FFFFFF").pack(side="left")
 
         ctk.CTkLabel(
             c2,
-            text="Magisk requires your untouched stock boot partition (~96 MB) to inject root code into the ramdisk.\n"
-                 "You can load the verified pre-dumped stock image in backups, dump it from the device, or browse locally.",
+            text="Automatically handles ADB → Fastboot → TWRP transitions in one click (USB cable required):\n"
+                 "• Tether-Boot to RAM (Zero-Risk): Boots TWRP temporarily without modifying internal recovery partition.\n"
+                 "• Flash Permanently: Writes TWRP to your device's recovery partition and reboots into TWRP.",
             font=ctk.CTkFont(family="Segoe UI", size=11),
             text_color=self.COLOR_TEXT_MUTED,
             justify="left"
         ).pack(anchor="w", padx=18, pady=(0, 10))
 
-        b_row2 = ctk.CTkFrame(c2, fg_color="transparent")
-        b_row2.pack(anchor="w", padx=18, pady=(0, 8))
+        b_row2_1 = ctk.CTkFrame(c2, fg_color="transparent")
+        b_row2_1.pack(anchor="w", padx=18, pady=(0, 8))
 
-        ctk.CTkButton(b_row2, text="📥 Use Pre-dumped Stock Boot", height=34, corner_radius=8, fg_color=self.COLOR_GREEN, hover_color="#059669", font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"), command=self._action_use_predumped_stock_boot).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(b_row2, text="📥 Dump from Device (Root/su)", height=34, corner_radius=8, fg_color=self.COLOR_BLUE, hover_color="#2563EB", command=self._action_backup_partitions).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(b_row2, text="📁 Browse Stock boot.img...", height=34, corner_radius=8, fg_color="#283042", hover_color="#3B4660", command=self._action_browse_stock_boot).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(b_row2, text="📦 Full Partition Dump", height=34, corner_radius=8, fg_color="#1E293B", hover_color="#334155", command=self._action_backup_full_partitions).pack(side="left")
+        ctk.CTkButton(b_row2_1, text="⚡ 1-Click: Tether-Boot TWRP (Zero-Risk)", height=36, corner_radius=8, fg_color=self.COLOR_GREEN, hover_color="#059669", font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"), command=self._action_boot_recovery).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(b_row2_1, text="💾 1-Click: Flash TWRP Permanently", height=36, corner_radius=8, fg_color="#1E293B", hover_color="#334155", font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"), command=self._action_flash_recovery).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(b_row2_1, text="🔄 Reboot into Recovery", height=36, corner_radius=8, fg_color="#283042", hover_color="#37435C", font=ctk.CTkFont(family="Segoe UI", size=11), command=self._action_reboot_recovery).pack(side="left")
 
-        stock_txt = f"Stock Boot: {self._selected_stock_boot} [Ready]" if self._selected_stock_boot else "No stock boot image selected yet (Click 'Use Pre-dumped' or Option A/B above)."
-        self.lbl_stock_boot_status = ctk.CTkLabel(
+        b_row2_2 = ctk.CTkFrame(c2, fg_color="transparent")
+        b_row2_2.pack(anchor="w", padx=18, pady=(0, 8))
+
+        ctk.CTkButton(b_row2_2, text="📥 Load Bundled TWRP", height=30, corner_radius=8, fg_color=self.COLOR_BLUE, hover_color="#2563EB", font=ctk.CTkFont(family="Segoe UI", size=11), command=self._action_use_bundled_recovery).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(b_row2_2, text="📁 Browse Custom Recovery (.img)...", height=30, corner_radius=8, fg_color="#1E293B", hover_color="#334155", font=ctk.CTkFont(family="Segoe UI", size=11), command=self._action_browse_recovery).pack(side="left")
+
+        rec_txt = f"Recovery Image: {self._selected_recovery_img} [Ready]" if self._selected_recovery_img else "No recovery image selected (Click 'Load Bundled TWRP' or 'Browse')."
+        self.lbl_recovery_status = ctk.CTkLabel(
             c2,
+            text=rec_txt,
+            font=ctk.CTkFont(family="Consolas", size=11),
+            text_color="#10B981" if self._selected_recovery_img else self.COLOR_TEXT_MUTED,
+            justify="left"
+        )
+        self.lbl_recovery_status.pack(anchor="w", padx=18, pady=(0, 14))
+
+        # ==========================================
+        # STEP 3: BACKUP STOCK PARTITIONS
+        # ==========================================
+        c3 = ctk.CTkFrame(page, corner_radius=12, fg_color=self.COLOR_CARD, border_width=1, border_color=self.COLOR_CARD_BORDER)
+        c3.pack(fill="x", pady=6)
+
+        h3 = ctk.CTkFrame(c3, fg_color="transparent")
+        h3.pack(anchor="w", padx=18, pady=(14, 4))
+        ctk.CTkLabel(h3, text="STEP 3", font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"), fg_color="#1E293B", text_color=self.COLOR_CYAN, corner_radius=6, padx=8, pady=2).pack(side="left", padx=(0, 10))
+        ctk.CTkLabel(h3, text="Backup Stock Boot & Recovery (No Root Needed via TWRP!)", font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"), text_color="#FFFFFF").pack(side="left")
+
+        ctk.CTkLabel(
+            c3,
+            text="Once in TWRP Recovery (from Step 2) or Rooted Android, dump your device's untouched stock partitions.\n"
+                 "Dumping in TWRP works WITHOUT prior root and automatically prepares 'stock_boot.img' for safety rollback.",
+            font=ctk.CTkFont(family="Segoe UI", size=11),
+            text_color=self.COLOR_TEXT_MUTED,
+            justify="left"
+        ).pack(anchor="w", padx=18, pady=(0, 10))
+
+        b_row3 = ctk.CTkFrame(c3, fg_color="transparent")
+        b_row3.pack(anchor="w", padx=18, pady=(0, 8))
+
+        ctk.CTkButton(b_row3, text="🛡️ 1-Click: Backup Stock Boot, Recovery & VBMeta", height=34, corner_radius=8, fg_color=self.COLOR_BLUE, hover_color="#2563EB", font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"), command=self._action_backup_partitions).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(b_row3, text="📦 Full Partition Dump", height=34, corner_radius=8, fg_color="#1E293B", hover_color="#334155", command=self._action_backup_full_partitions).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(b_row3, text="📁 Browse Stock boot.img...", height=34, corner_radius=8, fg_color="#283042", hover_color="#3B4660", command=self._action_browse_stock_boot).pack(side="left")
+
+        stock_txt = f"Stock Boot Backup: {self._selected_stock_boot} [Ready]" if self._selected_stock_boot else "No stock boot backup selected yet (Tether-boot TWRP in Step 2 then click Backup)."
+        self.lbl_stock_boot_status = ctk.CTkLabel(
+            c3,
             text=stock_txt,
             font=ctk.CTkFont(family="Consolas", size=11),
             text_color="#38BDF8" if self._selected_stock_boot else self.COLOR_TEXT_MUTED,
@@ -984,34 +1030,7 @@ class MainWindow(ctk.CTk):
         self.lbl_stock_boot_status.pack(anchor="w", padx=18, pady=(0, 14))
 
         # ==========================================
-        # STEP 3: TRANSFER & INSTALL MAGISK APP
-        # ==========================================
-        c3 = ctk.CTkFrame(page, corner_radius=12, fg_color=self.COLOR_CARD, border_width=1, border_color=self.COLOR_CARD_BORDER)
-        c3.pack(fill="x", pady=6)
-
-        h3 = ctk.CTkFrame(c3, fg_color="transparent")
-        h3.pack(anchor="w", padx=18, pady=(14, 4))
-        ctk.CTkLabel(h3, text="STEP 3", font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"), fg_color="#1E293B", text_color=self.COLOR_CYAN, corner_radius=6, padx=8, pady=2).pack(side="left", padx=(0, 10))
-        ctk.CTkLabel(h3, text="Install Magisk App & Transfer boot.img to Device", font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"), text_color="#FFFFFF").pack(side="left")
-
-        ctk.CTkLabel(
-            c3,
-            text="Automatically installs the official Magisk v31+ APK onto your Onyx e-reader and pushes your\n"
-                 "stock boot image directly to '/sdcard/Download/stock_boot.img' so it is immediately ready to patch.",
-            font=ctk.CTkFont(family="Segoe UI", size=11),
-            text_color=self.COLOR_TEXT_MUTED,
-            justify="left"
-        ).pack(anchor="w", padx=18, pady=(0, 10))
-
-        b_row3 = ctk.CTkFrame(c3, fg_color="transparent")
-        b_row3.pack(anchor="w", padx=18, pady=(0, 14))
-
-        ctk.CTkButton(b_row3, text="📦 1-Click: Install Magisk App & Push boot.img", height=36, corner_radius=8, fg_color=self.COLOR_GREEN, hover_color="#059669", font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"), command=self._action_install_magisk_and_push_boot).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(b_row3, text="📱 Open Magisk App on Device", height=36, corner_radius=8, fg_color="#283042", hover_color="#3B4660", command=self._action_launch_magisk).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(b_row3, text="📺 Open Screen Mirror (Scrcpy)", height=36, corner_radius=8, fg_color="#1E293B", hover_color="#334155", command=lambda: self._show_page("screen")).pack(side="left")
-
-        # ==========================================
-        # STEP 4: PATCH IN MAGISK & PULL IMAGE
+        # STEP 4: INSTALL MAGISK (TWRP OR BOOT PATCH)
         # ==========================================
         c4 = ctk.CTkFrame(page, corner_radius=12, fg_color=self.COLOR_CARD, border_width=1, border_color=self.COLOR_CARD_BORDER)
         c4.pack(fill="x", pady=6)
@@ -1019,32 +1038,48 @@ class MainWindow(ctk.CTk):
         h4 = ctk.CTkFrame(c4, fg_color="transparent")
         h4.pack(anchor="w", padx=18, pady=(14, 4))
         ctk.CTkLabel(h4, text="STEP 4", font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"), fg_color="#1E293B", text_color=self.COLOR_CYAN, corner_radius=6, padx=8, pady=2).pack(side="left", padx=(0, 10))
-        ctk.CTkLabel(h4, text="Patch Boot in Magisk & Retrieve Patched Image to PC", font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"), text_color="#FFFFFF").pack(side="left")
+        ctk.CTkLabel(h4, text="Root Device with Magisk (Choose Method A or B)", font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"), text_color="#FFFFFF").pack(side="left")
 
-        guide_box = ctk.CTkFrame(c4, corner_radius=8, fg_color="#111622", border_width=1, border_color="#1C2436")
-        guide_box.pack(fill="x", padx=18, pady=(0, 10))
-
+        method_a_box = ctk.CTkFrame(c4, corner_radius=8, fg_color="#111927", border_width=1, border_color="#1E3A5F")
+        method_a_box.pack(fill="x", padx=18, pady=(6, 8))
         ctk.CTkLabel(
-            guide_box,
-            text="Follow these 4 simple taps on your Onyx screen (or via Scrcpy Screen Mirror tab):\n"
-                 "  1. Open the Magisk app -> Tap 'Install' on the top Magisk card.\n"
-                 "  2. Choose 'Select and Patch a File'.\n"
-                 "  3. In file picker, navigate to 'Download' folder and select 'stock_boot.img'.\n"
-                 "  4. Tap 'LET'S GO' -> Magisk generates 'magisk_patched_*.img' in Download.\n"
-                 "  * Alternatively, click 'Use Pre-Patched Image' to skip patching and flash immediately!",
+            method_a_box,
+            text="Method A (Fastest — While in TWRP Recovery): Pushes Magisk directly to TWRP, flashes it, and reboots to rooted Android.",
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            text_color="#38BDF8"
+        ).pack(anchor="w", padx=12, pady=(8, 6))
+        ctk.CTkButton(
+            method_a_box,
+            text="⚡ 1-Click: Flash Magisk Directly via TWRP & Reboot",
+            height=36,
+            corner_radius=8,
+            fg_color=self.COLOR_GREEN,
+            hover_color="#059669",
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            command=self._action_flash_magisk_twrp
+        ).pack(anchor="w", padx=12, pady=(0, 10))
+
+        method_b_box = ctk.CTkFrame(c4, corner_radius=8, fg_color="#111622", border_width=1, border_color="#1C2436")
+        method_b_box.pack(fill="x", padx=18, pady=(0, 10))
+        ctk.CTkLabel(
+            method_b_box,
+            text="Method B (Manual App Patching — In Android OS):\n"
+                 "  1. Click 'Install Magisk & Push Boot' -> Opens Magisk -> Tap Install -> Select and Patch 'Download/stock_boot.img'.\n"
+                 "  2. Click 'Auto-Pull & Flash Patched Boot' below -> Tool automatically pulls, reboots to Fastboot, flashes, and reboots.",
             font=ctk.CTkFont(family="Segoe UI", size=11),
             text_color="#CBD5E1",
             justify="left"
-        ).pack(anchor="w", padx=12, pady=10)
+        ).pack(anchor="w", padx=12, pady=(8, 8))
 
-        b_row4 = ctk.CTkFrame(c4, fg_color="transparent")
-        b_row4.pack(anchor="w", padx=18, pady=(0, 8))
+        b_row4 = ctk.CTkFrame(method_b_box, fg_color="transparent")
+        b_row4.pack(anchor="w", padx=12, pady=(0, 8))
 
-        ctk.CTkButton(b_row4, text="📥 1-Click: Auto-Detect & Pull Patched Image to PC", height=36, corner_radius=8, fg_color=self.COLOR_BLUE, hover_color="#2563EB", font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"), command=self._action_pull_patched_boot).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(b_row4, text="⚡ Use Pre-Patched Image", height=36, corner_radius=8, fg_color=self.COLOR_GREEN, hover_color="#059669", font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"), command=self._action_use_predumped_patched_boot).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(b_row4, text="📁 Browse Patched Image...", height=36, corner_radius=8, fg_color="#283042", hover_color="#3B4660", command=self._action_browse_patched_boot).pack(side="left")
+        ctk.CTkButton(b_row4, text="📦 Install Magisk & Push stock_boot.img", height=32, corner_radius=8, fg_color="#283042", hover_color="#3B4660", command=self._action_install_magisk_and_push_boot).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(b_row4, text="📱 Open Magisk", height=32, corner_radius=8, fg_color="#1E293B", hover_color="#334155", command=self._action_launch_magisk).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(b_row4, text="🚀 1-Click: Auto-Pull & Flash Patched Boot", height=32, corner_radius=8, fg_color=self.COLOR_BLUE, hover_color="#2563EB", font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"), command=self._action_auto_pull_and_flash_boot).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(b_row4, text="📁 Browse Patched .img...", height=32, corner_radius=8, fg_color="#1E293B", hover_color="#334155", command=self._action_browse_patched_boot).pack(side="left")
 
-        patched_txt = f"Patched Boot: {self._selected_patched_boot} [Ready to Flash]" if self._selected_patched_boot else "No patched image selected yet (Click 'Auto-Detect & Pull' or 'Use Pre-Patched')."
+        patched_txt = f"Patched Boot: {self._selected_patched_boot} [Ready to Flash]" if self._selected_patched_boot else "No patched boot image selected yet."
         self.lbl_patched_boot_status = ctk.CTkLabel(
             c4,
             text=patched_txt,
@@ -1055,7 +1090,7 @@ class MainWindow(ctk.CTk):
         self.lbl_patched_boot_status.pack(anchor="w", padx=18, pady=(0, 14))
 
         # ==========================================
-        # STEP 5: FLASH PATCHED BOOT & REBOOT
+        # STEP 5: VERIFY ROOT, WAKE MODULE & ROLLBACK
         # ==========================================
         c5 = ctk.CTkFrame(page, corner_radius=12, fg_color=self.COLOR_CARD, border_width=1, border_color=self.COLOR_CARD_BORDER)
         c5.pack(fill="x", pady=6)
@@ -1063,12 +1098,11 @@ class MainWindow(ctk.CTk):
         h5 = ctk.CTkFrame(c5, fg_color="transparent")
         h5.pack(anchor="w", padx=18, pady=(14, 4))
         ctk.CTkLabel(h5, text="STEP 5", font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"), fg_color="#1E293B", text_color=self.COLOR_CYAN, corner_radius=6, padx=8, pady=2).pack(side="left", padx=(0, 10))
-        ctk.CTkLabel(h5, text="Flash Patched Boot via Fastboot & Reboot to Root", font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"), text_color="#FFFFFF").pack(side="left")
+        ctk.CTkLabel(h5, text="Verify Root Access, Side-Key Wake & Emergency Stock Restore", font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"), text_color="#FFFFFF").pack(side="left")
 
         ctk.CTkLabel(
             c5,
-            text="Flashes the retrieved Magisk-patched boot image to your device's active boot slot via Fastboot,\n"
-                 "then automatically reboots into fully-rooted Android.",
+            text="Verify Superuser access (uid=0), install the hardware side-button wake module, or restore your backed-up stock boot.",
             font=ctk.CTkFont(family="Segoe UI", size=11),
             text_color=self.COLOR_TEXT_MUTED,
             justify="left"
@@ -1077,116 +1111,9 @@ class MainWindow(ctk.CTk):
         b_row5 = ctk.CTkFrame(c5, fg_color="transparent")
         b_row5.pack(anchor="w", padx=18, pady=(0, 14))
 
-        ctk.CTkButton(b_row5, text="⚡ 1. Reboot to Fastboot Mode", height=36, corner_radius=8, fg_color="#283042", hover_color="#3B4660", command=lambda: self.ops.reboot_device("bootloader")).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(b_row5, text="🚀 2. Flash Patched Boot & Reboot Device", height=36, corner_radius=8, fg_color=self.COLOR_GREEN, hover_color="#059669", font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"), command=self._action_flash_patched_boot_wizard).pack(side="left")
-
-        # ==========================================
-        # STEP 6: VERIFY ROOT & SAFETY ROLLBACK
-        # ==========================================
-        c6 = ctk.CTkFrame(page, corner_radius=12, fg_color=self.COLOR_CARD, border_width=1, border_color=self.COLOR_CARD_BORDER)
-        c6.pack(fill="x", pady=6)
-
-        h6 = ctk.CTkFrame(c6, fg_color="transparent")
-        h6.pack(anchor="w", padx=18, pady=(14, 4))
-        ctk.CTkLabel(h6, text="STEP 6", font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"), fg_color="#1E293B", text_color=self.COLOR_CYAN, corner_radius=6, padx=8, pady=2).pack(side="left", padx=(0, 10))
-        ctk.CTkLabel(h6, text="Verify Root Access, Button Wake & Safety Rollback", font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"), text_color="#FFFFFF").pack(side="left")
-
-        ctk.CTkLabel(
-            c6,
-            text="Verify your Superuser privileges, install the hardware button wake module, or revert to stock boot.",
-            font=ctk.CTkFont(family="Segoe UI", size=11),
-            text_color=self.COLOR_TEXT_MUTED,
-            justify="left"
-        ).pack(anchor="w", padx=18, pady=(0, 10))
-
-        b_row6 = ctk.CTkFrame(c6, fg_color="transparent")
-        b_row6.pack(anchor="w", padx=18, pady=(0, 14))
-
-        ctk.CTkButton(b_row6, text="🔍 1. Verify Root Access (su test)", height=34, corner_radius=8, fg_color=self.COLOR_BLUE, hover_color="#2563EB", command=self._action_verify_root).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(b_row6, text="⚡ 2. Install 'c69hd-wake' Magisk Module", height=34, corner_radius=8, fg_color="#1E293B", hover_color="#334155", command=self._action_install_wake_module).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(b_row6, text="🔄 Emergency: Restore Stock Boot", height=34, corner_radius=8, fg_color=self.COLOR_RED, hover_color="#DC2626", command=self._action_restore_stock_boot).pack(side="left")
-
-        # ==========================================
-        # STEP 7: CUSTOM TWRP RECOVERY (TOUCH & E-INK DRM)
-        # ==========================================
-        c7 = ctk.CTkFrame(page, corner_radius=12, fg_color=self.COLOR_CARD, border_width=1, border_color=self.COLOR_CARD_BORDER)
-        c7.pack(fill="x", pady=6)
-
-        h7 = ctk.CTkFrame(c7, fg_color="transparent")
-        h7.pack(anchor="w", padx=18, pady=(14, 4))
-        ctk.CTkLabel(h7, text="STEP 7", font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"), fg_color="#1E293B", text_color=self.COLOR_CYAN, corner_radius=6, padx=8, pady=2).pack(side="left", padx=(0, 10))
-        ctk.CTkLabel(h7, text="Custom TWRP Recovery Studio (Touch & E-Ink DRM)", font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"), text_color="#FFFFFF").pack(side="left")
-
-        ctk.CTkLabel(
-            c7,
-            text="Onyx Boox C69HD custom TWRP 11.0 features native Qualcomm Atomic DRM EPDC E-Ink display drivers\n"
-                 "(Plane 68 SSPP ViG0) and FocalTech touchscreen digitizer support for full on-screen touch navigation.\n"
-                 "• Zero-Risk Tether-Boot: Streams TWRP to device RAM without flashing or altering internal storage.\n"
-                 "• Permanent Flash: Installs TWRP directly to the recovery partition.",
-            font=ctk.CTkFont(family="Segoe UI", size=11),
-            text_color=self.COLOR_TEXT_MUTED,
-            justify="left"
-        ).pack(anchor="w", padx=18, pady=(0, 10))
-
-        b_row7_1 = ctk.CTkFrame(c7, fg_color="transparent")
-        b_row7_1.pack(anchor="w", padx=18, pady=(0, 8))
-
-        ctk.CTkButton(b_row7_1, text="⚡ 1-Click: Tether-Boot TWRP to RAM (Zero-Risk)", height=36, corner_radius=8, fg_color=self.COLOR_GREEN, hover_color="#059669", font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"), command=self._action_boot_recovery).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(b_row7_1, text="💾 Flash TWRP to Recovery (Permanent)", height=36, corner_radius=8, fg_color="#1E293B", hover_color="#334155", font=ctk.CTkFont(family="Segoe UI", size=11), command=self._action_flash_recovery).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(b_row7_1, text="🔄 Reboot into Recovery Mode", height=36, corner_radius=8, fg_color="#283042", hover_color="#37435C", font=ctk.CTkFont(family="Segoe UI", size=11), command=self._action_reboot_recovery).pack(side="left")
-
-        b_row7_2 = ctk.CTkFrame(c7, fg_color="transparent")
-        b_row7_2.pack(anchor="w", padx=18, pady=(0, 8))
-
-        ctk.CTkButton(b_row7_2, text="📥 Use Bundled Working TWRP", height=32, corner_radius=8, fg_color=self.COLOR_BLUE, hover_color="#2563EB", font=ctk.CTkFont(family="Segoe UI", size=11), command=self._action_use_bundled_recovery).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(b_row7_2, text="📁 Browse Custom Recovery (.img)...", height=32, corner_radius=8, fg_color="#1E293B", hover_color="#334155", font=ctk.CTkFont(family="Segoe UI", size=11), command=self._action_browse_recovery).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(b_row7_2, text="🛡️ Dump Stock Recovery Partition (su)", height=32, corner_radius=8, fg_color="#131926", hover_color="#1F293D", font=ctk.CTkFont(family="Segoe UI", size=11), command=self._action_backup_stock_recovery).pack(side="left")
-
-        rec_txt = f"Recovery Image: {self._selected_recovery_img} [Ready]" if self._selected_recovery_img else "No recovery image selected (Click 'Use Bundled Working TWRP' or 'Browse')."
-        self.lbl_recovery_status = ctk.CTkLabel(
-            c7,
-            text=rec_txt,
-            font=ctk.CTkFont(family="Consolas", size=11),
-            text_color="#10B981" if self._selected_recovery_img else self.COLOR_TEXT_MUTED,
-            justify="left"
-        )
-        self.lbl_recovery_status.pack(anchor="w", padx=18, pady=(0, 14))
-
-        return page
-        ctk.CTkLabel(
-            c7,
-            text="Onyx Boox C69HD custom TWRP 11.0 features native Qualcomm Atomic DRM EPDC E-Ink display drivers\n"
-                 "(Plane 68 SSPP ViG0) and FocalTech touchscreen digitizer support for full on-screen touch navigation.\n"
-                 "• Zero-Risk Tether-Boot: Streams TWRP to device RAM without flashing or altering internal storage.\n"
-                 "• Permanent Flash: Installs TWRP directly to the recovery partition.",
-            font=ctk.CTkFont(family="Segoe UI", size=11),
-            text_color=self.COLOR_TEXT_MUTED,
-            justify="left"
-        ).pack(anchor="w", padx=18, pady=(0, 10))
-
-        b_row7_1 = ctk.CTkFrame(c7, fg_color="transparent")
-        b_row7_1.pack(anchor="w", padx=18, pady=(0, 8))
-
-        ctk.CTkButton(b_row7_1, text="⚡ 1-Click: Tether-Boot TWRP to RAM (Zero-Risk)", height=36, corner_radius=8, fg_color=self.COLOR_GREEN, hover_color="#059669", font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"), command=self._action_boot_recovery).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(b_row7_1, text="💾 Flash TWRP to Recovery (Permanent)", height=36, corner_radius=8, fg_color="#1E293B", hover_color="#334155", font=ctk.CTkFont(family="Segoe UI", size=11), command=self._action_flash_recovery).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(b_row7_1, text="🔄 Reboot into Recovery Mode", height=36, corner_radius=8, fg_color="#283042", hover_color="#37435C", font=ctk.CTkFont(family="Segoe UI", size=11), command=self._action_reboot_recovery).pack(side="left")
-
-        b_row7_2 = ctk.CTkFrame(c7, fg_color="transparent")
-        b_row7_2.pack(anchor="w", padx=18, pady=(0, 8))
-
-        ctk.CTkButton(b_row7_2, text="📥 Use Bundled Working TWRP", height=32, corner_radius=8, fg_color=self.COLOR_BLUE, hover_color="#2563EB", font=ctk.CTkFont(family="Segoe UI", size=11), command=self._action_use_bundled_recovery).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(b_row7_2, text="📁 Browse Custom Recovery (.img)...", height=32, corner_radius=8, fg_color="#1E293B", hover_color="#334155", font=ctk.CTkFont(family="Segoe UI", size=11), command=self._action_browse_recovery).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(b_row7_2, text="🛡️ Dump Stock Recovery Partition (su)", height=32, corner_radius=8, fg_color="#131926", hover_color="#1F293D", font=ctk.CTkFont(family="Segoe UI", size=11), command=self._action_backup_stock_recovery).pack(side="left")
-
-        rec_txt = f"Recovery Image: {self._selected_recovery_img} [Ready]" if self._selected_recovery_img else "No recovery image selected (Click 'Use Bundled Working TWRP' or 'Browse')."
-        self.lbl_recovery_status = ctk.CTkLabel(
-            c7,
-            text=rec_txt,
-            font=ctk.CTkFont(family="Consolas", size=11),
-            text_color="#10B981" if self._selected_recovery_img else self.COLOR_TEXT_MUTED,
-            justify="left"
-        )
-        self.lbl_recovery_status.pack(anchor="w", padx=18, pady=(0, 14))
+        ctk.CTkButton(b_row5, text="🔍 Verify Root (su check)", height=34, corner_radius=8, fg_color=self.COLOR_BLUE, hover_color="#2563EB", command=self._action_verify_root).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(b_row5, text="⚡ Install 'c69hd-wake' Module", height=34, corner_radius=8, fg_color="#1E293B", hover_color="#334155", command=self._action_install_wake_module).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(b_row5, text="🔄 Emergency: Restore Stock Boot", height=34, corner_radius=8, fg_color=self.COLOR_RED, hover_color="#DC2626", command=self._action_restore_stock_boot).pack(side="left")
 
         return page
 
@@ -1736,10 +1663,19 @@ class MainWindow(ctk.CTk):
                 )
                 self.lbl_device_title.configure(text=f"{info['model']} ({info['manufacturer']})")
                 self.lbl_device_details.configure(text=f"Slot: {info['boot_slot']} • Bat: {info['battery_level']}")
-            elif info["mode"] == "fastboot":
-                self.lbl_status_badge.configure(text="FASTBOOT MODE", fg_color="#78350F", text_color="#FFFFFF")
-                self.lbl_device_title.configure(text="Fastboot Device")
+            elif info["mode"] == "recovery":
+                self.lbl_status_badge.configure(text="TWRP / RECOVERY", fg_color="#0E7490", text_color="#FFFFFF")
+                self.lbl_device_title.configure(text=f"Recovery ({info.get('device', 'C69HD')})")
+                self.lbl_device_details.configure(text=f"Slot: {info['boot_slot']} • Root ADB: {'Yes' if info.get('recovery_root') else 'No'}")
+            elif info["mode"] == "sideload":
+                self.lbl_status_badge.configure(text="ADB SIDELOAD", fg_color="#0E7490", text_color="#FFFFFF")
+                self.lbl_device_title.configure(text="Recovery Sideload")
                 self.lbl_device_details.configure(text=f"Serial: {info['serial']}")
+            elif info["mode"] == "fastboot":
+                fb_label = "FASTBOOTD" if info.get("is_userspace") else "FASTBOOT MODE"
+                self.lbl_status_badge.configure(text=fb_label, fg_color="#78350F", text_color="#FFFFFF")
+                self.lbl_device_title.configure(text="Fastboot Device")
+                self.lbl_device_details.configure(text=f"Slot: {info['boot_slot']} • {'Unlocked' if info.get('unlocked') else 'Locked'}")
 
             if info.get("is_wireless"):
                 self.btn_wireless.configure(text="🔌 Switch to USB Cable", fg_color=self.COLOR_AMBER)
@@ -1756,13 +1692,19 @@ class MainWindow(ctk.CTk):
                 f"Android Version  : Android {info['android_version']} (API 30)\n"
                 f"Active Boot Slot : {info['boot_slot']}\n"
                 f"Bootloader State : {'Unlocked' if info['unlocked'] else 'Locked'}\n"
-                f"Root (Magisk/su) : {'Active (UID 0)' if info['rooted'] else 'No su binary detected'}\n"
+                f"Root (Magisk/su) : {'Active (UID 0)' if info['rooted'] else ('TWRP Root ADB' if info.get('recovery_root') else 'No su binary detected')}\n"
                 f"Battery Status   : {info['battery_level']} (Charging: {info['battery_charging']})\n"
                 f"Internal Storage : {info.get('storage_avail', 'N/A')} free of {info.get('storage_total', 'N/A')}\n"
             )
             self.lbl_specs.configure(text=specs_text)
-            self._action_refresh_debloat_list_async()
-            self._action_query_settings_silent()
+            if info["mode"] == "adb":
+                self._action_refresh_debloat_list_async()
+                self._action_query_settings_silent()
+        elif info.get("mode") == "unauthorized":
+            self.lbl_status_badge.configure(text="UNAUTHORIZED", fg_color="#9A3412", text_color="#FFFFFF")
+            self.lbl_device_title.configure(text="USB Debugging Prompt")
+            self.lbl_device_details.configure(text="Tap 'Allow' on device screen")
+            self.lbl_specs.configure(text="Device is unauthorized. Please accept the USB debugging RSA prompt on the Onyx screen.")
         else:
             self.lbl_status_badge.configure(text="DISCONNECTED", fg_color="#7F1D1D", text_color="#FFFFFF")
             self.lbl_device_title.configure(text="No Device Detected")
@@ -1771,16 +1713,37 @@ class MainWindow(ctk.CTk):
 
         if hasattr(self, "lbl_root_wizard_status"):
             if info["connected"]:
-                mode_str = f"ADB Online ({info.get('model', 'C69HD')})" if info["mode"] == "adb" else "Fastboot Mode"
+                if info["mode"] == "adb":
+                    conn_tag = "Wi-Fi ADB [Requires USB for Fastboot]" if info.get("is_wireless") else "USB ADB"
+                    mode_str = f"{conn_tag} ({info.get('model', 'C69HD')})"
+                elif info["mode"] == "recovery":
+                    mode_str = "TWRP Recovery ADB (uid=0)" if info.get("recovery_root") else "Recovery ADB"
+                elif info["mode"] == "sideload":
+                    mode_str = "Recovery Sideload"
+                else:
+                    mode_str = "Fastbootd (Userspace)" if info.get("is_userspace") else "Fastboot Bootloader"
+
                 bl_str = "Unlocked [✓]" if info.get("unlocked") else "Locked [ ! ]"
-                rt_str = "Rooted (UID 0 Active) [✓]" if info.get("rooted") else "Not Rooted [ ]"
+                if info.get("rooted"):
+                    rt_str = "Rooted (UID 0) [✓]"
+                elif info.get("recovery_root"):
+                    rt_str = "TWRP Root ADB [✓]"
+                else:
+                    rt_str = "Not Rooted [ ]"
                 slot_str = info.get("boot_slot", "_a")
                 self.lbl_root_wizard_status.configure(
-                    text=f"Connection: {mode_str}   |   Slot: {slot_str}   |   Bootloader: {bl_str}   |   Root: {rt_str}"
+                    text=f"Mode: {mode_str}   |   Slot: {slot_str}   |   Bootloader: {bl_str}   |   Root: {rt_str}",
+                    text_color="#FBBF24" if info.get("is_wireless") else "#E2E8F0"
+                )
+            elif info.get("mode") == "unauthorized":
+                self.lbl_root_wizard_status.configure(
+                    text="Mode: Unauthorized [ ! ]   |   Tap 'Always allow from this computer' on your Onyx Boox screen.",
+                    text_color="#F59E0B"
                 )
             else:
                 self.lbl_root_wizard_status.configure(
-                    text="Connection: Disconnected [ ! ]   |   Please connect your Onyx Boox C69HD with USB Debugging enabled."
+                    text="Mode: Disconnected [ ! ]   |   Connect via USB cable with USB Debugging enabled (or boot into Fastboot).",
+                    text_color="#E2E8F0"
                 )
 
     # =========================================================================
@@ -2024,28 +1987,60 @@ class MainWindow(ctk.CTk):
     # =========================================================================
     # ACTIONS: ROOT WIZARD & PARTITIONS
     # =========================================================================
+    def _set_root_progress(self, text, color="#38BDF8"):
+        def _upd():
+            if hasattr(self, "lbl_root_progress"):
+                self.lbl_root_progress.configure(text=text, text_color=color)
+        self.dispatch(_upd)
+
+    def _action_reboot_target(self, target):
+        def _run():
+            self._set_root_progress(f"Rebooting device to {target}...", "#FBBF24")
+            mode, _, _ = self.adb.get_device_mode()
+            if mode == "fastboot":
+                if target == "bootloader":
+                    ok, _, err = self.adb.run_fastboot("reboot-bootloader")
+                elif target == "recovery":
+                    ok, _, err = self.adb.run_fastboot("reboot", "recovery")
+                else:
+                    ok, _, err = self.adb.run_fastboot("reboot")
+                msg = f"Fastboot reboot to {target} sent." if ok else f"Reboot failed: {err}"
+            else:
+                ok, msg = self.ops.reboot_device(target)
+            self._set_root_progress(msg, "#10B981" if ok else "#EF4444")
+            self.refresh_device_status_async()
+        threading.Thread(target=_run, daemon=True).start()
+
     def _action_unlock_bootloader(self):
         if not messagebox.askyesno(
-            "Confirm Bootloader Unlock",
-            "WARNING: Unlocking the bootloader on Qualcomm devices may wipe user data if it was previously locked.\n\n"
-            "Ensure your device is in Fastboot mode before proceeding.\n\n"
-            "Do you wish to send the Fastboot unlock command now?"
+            "Confirm Bootloader Check / Unlock",
+            "This will automatically reboot your device to Fastboot mode and check/unlock the bootloader.\n\n"
+            "WARNING: If the bootloader is currently locked, unlocking it may wipe user data.\n"
+            "Ensure 'OEM Unlocking' is enabled in Android Developer Options and use a USB cable.\n\n"
+            "Proceed?"
         ):
             return
         def _run():
-            ok, msg = self.ops.unlock_bootloader_fastboot()
+            self._set_root_progress("Entering Fastboot mode to check/unlock bootloader...", "#FBBF24")
+            ok, msg = self.ops.unlock_bootloader_fastboot(
+                auto_reboot_fastboot=True,
+                status_callback=lambda s: self._set_root_progress(s, "#FBBF24")
+            )
+            self._set_root_progress(msg.splitlines()[0], "#10B981" if ok else "#EF4444")
             if ok:
-                messagebox.showinfo("Bootloader Unlock", msg)
+                self.dispatch(lambda: messagebox.showinfo("Bootloader Unlock", msg))
             else:
-                messagebox.showerror("Unlock Error", msg)
+                self.dispatch(lambda: messagebox.showerror("Unlock Error", msg))
             self.refresh_device_status_async()
         threading.Thread(target=_run, daemon=True).start()
 
     def _action_backup_partitions(self):
         def _run():
+            self._set_root_progress("Backing up stock boot, recovery, and vbmeta partitions...", "#FBBF24")
             info = self.adb.get_connected_device_info()
             slot = info.get("boot_slot", "_a")
-            ok, msg = self.ops.backup_stock_partitions(slot=slot, partition_list=[f"boot{slot}", f"vbmeta{slot}"])
+            part_list = [f"boot{slot}", f"recovery{slot}", "recovery", f"vbmeta{slot}"]
+            ok, msg = self.ops.backup_stock_partitions(slot=slot, partition_list=part_list)
             if ok:
                 boot_candidate = os.path.join(os.getcwd(), "backups", f"stock_boot{slot}.img")
                 if os.path.exists(boot_candidate):
@@ -2054,25 +2049,29 @@ class MainWindow(ctk.CTk):
                         if hasattr(self, "lbl_stock_boot_status"):
                             size_mb = os.path.getsize(self._selected_stock_boot) / (1024 * 1024)
                             self.lbl_stock_boot_status.configure(
-                                text=f"Stock Boot: {self._selected_stock_boot} ({size_mb:.1f} MB) [Ready]",
+                                text=f"Stock Boot Backup: {self._selected_stock_boot} ({size_mb:.1f} MB) [Ready]",
                                 text_color="#38BDF8"
                             )
                     self.dispatch(_update_ui)
-                messagebox.showinfo("Backup Success", msg)
+                self._set_root_progress("Stock partition backup complete!", "#10B981")
+                self.dispatch(lambda: messagebox.showinfo("Backup Success", msg))
             else:
-                messagebox.showerror("Backup Failed", msg)
+                self._set_root_progress("Stock partition backup failed.", "#EF4444")
+                self.dispatch(lambda: messagebox.showerror("Backup Failed", msg))
         threading.Thread(target=_run, daemon=True).start()
 
     def _action_backup_full_partitions(self):
         def _run():
+            self._set_root_progress("Running full partition dump...", "#FBBF24")
             info = self.adb.get_connected_device_info()
             slot = info.get("boot_slot", "_a")
-            full_list = [f"boot{slot}", f"dtbo{slot}", f"recovery{slot}", f"vbmeta{slot}", f"vbmeta_system{slot}", "persist"]
+            full_list = [f"boot{slot}", f"dtbo{slot}", f"recovery{slot}", "recovery", f"vbmeta{slot}", f"vbmeta_system{slot}", "persist"]
             ok, msg = self.ops.backup_stock_partitions(slot=slot, partition_list=full_list)
+            self._set_root_progress("Full partition dump complete!" if ok else "Full dump failed.", "#10B981" if ok else "#EF4444")
             if ok:
-                messagebox.showinfo("Full Backup Success", msg)
+                self.dispatch(lambda: messagebox.showinfo("Full Backup Success", msg))
             else:
-                messagebox.showerror("Full Backup Failed", msg)
+                self.dispatch(lambda: messagebox.showerror("Full Backup Failed", msg))
         threading.Thread(target=_run, daemon=True).start()
 
     def _action_browse_stock_boot(self):
@@ -2082,7 +2081,7 @@ class MainWindow(ctk.CTk):
             size_mb = os.path.getsize(self._selected_stock_boot) / (1024 * 1024)
             if hasattr(self, "lbl_stock_boot_status"):
                 self.lbl_stock_boot_status.configure(
-                    text=f"Stock Boot: {self._selected_stock_boot} ({size_mb:.1f} MB) [Ready]",
+                    text=f"Stock Boot Backup: {self._selected_stock_boot} ({size_mb:.1f} MB) [Ready]",
                     text_color="#38BDF8"
                 )
             self.append_log(f"Selected stock boot image: {self._selected_stock_boot} ({size_mb:.1f} MB)")
@@ -2094,13 +2093,32 @@ class MainWindow(ctk.CTk):
             size_mb = os.path.getsize(found) / (1024 * 1024)
             if hasattr(self, "lbl_stock_boot_status"):
                 self.lbl_stock_boot_status.configure(
-                    text=f"Stock Boot: {found} ({size_mb:.1f} MB) [Ready]",
+                    text=f"Stock Boot Backup: {found} ({size_mb:.1f} MB) [Ready]",
                     text_color="#38BDF8"
                 )
             messagebox.showinfo("Pre-dumped Boot Loaded", f"Verified stock boot partition loaded from:\n{found} ({size_mb:.1f} MB)")
             self.append_log(f"Loaded verified stock boot: {found}")
         else:
-            messagebox.showwarning("Not Found", "No pre-dumped stock boot image found in backups/. Please dump from device or browse locally.")
+            messagebox.showwarning("Not Found", "No pre-dumped stock boot image found in backups/. Tether-boot TWRP in Step 2 and click Backup in Step 3.")
+
+    def _action_flash_magisk_twrp(self):
+        base_dir = getattr(sys, '_MEIPASS', os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        assets_apk = os.path.join(base_dir, "assets", "magisk.apk")
+        if not os.path.exists(assets_apk):
+            assets_apk = filedialog.askopenfilename(title="Select Magisk APK / ZIP", filetypes=[("Magisk Package", "*.apk *.zip")])
+            if not assets_apk:
+                return
+
+        def _run():
+            self._set_root_progress("Checking TWRP Recovery mode & pushing Magisk...", "#FBBF24")
+            ok, msg = self.ops.install_magisk_via_twrp(assets_apk, reboot_to_system=True)
+            self._set_root_progress(msg.splitlines()[0], "#10B981" if ok else "#EF4444")
+            if ok:
+                self.dispatch(lambda: messagebox.showinfo("Magisk Flashed via TWRP", msg))
+            else:
+                self.dispatch(lambda: messagebox.showerror("TWRP Magisk Flash Failed", msg))
+            self.refresh_device_status_async()
+        threading.Thread(target=_run, daemon=True).start()
 
     def _action_install_magisk_and_push_boot(self):
         base_dir = getattr(sys, '_MEIPASS', os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -2117,24 +2135,29 @@ class MainWindow(ctk.CTk):
                 self._selected_stock_boot = boot_to_push
 
         def _run():
+            self._set_root_progress("Installing Magisk APK and pushing stock_boot.img...", "#FBBF24")
             ok_apk, msg_apk = self.ops.install_magisk_apk(assets_apk)
             if not ok_apk:
-                messagebox.showerror("Magisk Install Failed", msg_apk)
+                self._set_root_progress("Magisk APK install failed.", "#EF4444")
+                self.dispatch(lambda: messagebox.showerror("Magisk Install Failed", msg_apk))
                 return
 
             if boot_to_push and os.path.exists(boot_to_push):
                 ok_push, msg_push = self.ops.push_boot_to_device(boot_to_push)
                 if ok_push:
-                    messagebox.showinfo(
+                    self._set_root_progress("Magisk APK installed & stock_boot.img pushed to Download!", "#10B981")
+                    self.dispatch(lambda: messagebox.showinfo(
                         "Magisk & Boot Ready",
                         f"1. Magisk APK installed successfully on device!\n"
                         f"2. {msg_push}\n\n"
-                        f"Next: Tap 'Open Magisk App on Device' or use Screen Mirror to patch 'stock_boot.img' in Download."
-                    )
+                        f"Next: Tap 'Open Magisk' and select 'Install -> Select and Patch a File -> Download/stock_boot.img'."
+                    ))
                 else:
-                    messagebox.showwarning("Boot Push Warning", f"Magisk installed, but pushing boot image failed:\n{msg_push}")
+                    self._set_root_progress("Magisk installed, boot push failed.", "#F59E0B")
+                    self.dispatch(lambda: messagebox.showwarning("Boot Push Warning", f"Magisk installed, but pushing boot image failed:\n{msg_push}"))
             else:
-                messagebox.showinfo("Magisk Installed", f"{msg_apk}\n\nNote: Please select or dump a stock boot image in Step 2 to push it to device.")
+                self._set_root_progress("Magisk APK installed (no stock_boot.img selected yet).", "#38BDF8")
+                self.dispatch(lambda: messagebox.showinfo("Magisk Installed", f"{msg_apk}\n\nNote: Back up or browse stock_boot.img in Step 3 to push it to device."))
             self.refresh_device_status_async()
         threading.Thread(target=_run, daemon=True).start()
 
@@ -2144,7 +2167,55 @@ class MainWindow(ctk.CTk):
             if ok:
                 self.append_log(msg)
             else:
-                messagebox.showwarning("Launch Magisk", msg)
+                self.dispatch(lambda: messagebox.showwarning("Launch Magisk", msg))
+        threading.Thread(target=_run, daemon=True).start()
+
+    def _action_auto_pull_and_flash_boot(self):
+        def _run():
+            self._set_root_progress("Pulling Magisk-patched boot image from device...", "#FBBF24")
+            img_to_flash = None
+            mode, _, _ = self.adb.get_device_mode()
+            if mode == "adb":
+                ok_pull, path, msg_pull = self.ops.pull_latest_magisk_patched_boot()
+                if ok_pull and path:
+                    img_to_flash = path
+                    self._selected_patched_boot = path
+                    size_mb = os.path.getsize(path) / (1024 * 1024)
+                    def _upd_lbl():
+                        if hasattr(self, "lbl_patched_boot_status"):
+                            self.lbl_patched_boot_status.configure(
+                                text=f"Patched Boot: {path} ({size_mb:.1f} MB) [Ready to Flash]",
+                                text_color="#10B981"
+                            )
+                    self.dispatch(_upd_lbl)
+
+            if not img_to_flash:
+                img_to_flash = self._selected_patched_boot or self._find_backup_file("magisk_patched_boot_a.img", "magisk_patched")
+
+            if not img_to_flash or not os.path.exists(img_to_flash):
+                self._set_root_progress("No patched boot image found.", "#EF4444")
+                self.dispatch(lambda: messagebox.showwarning(
+                    "Patched Image Not Found",
+                    "No Magisk-patched boot image was found on device (/sdcard/Download/magisk_patched*.img) or locally.\n\n"
+                    "Patch stock_boot.img in the Magisk app first, or use 'Browse Patched .img'."
+                ))
+                return
+
+            info = self.adb.get_connected_device_info()
+            slot = info.get("boot_slot", "_a")
+            self._set_root_progress(f"Rebooting to Fastboot to flash {os.path.basename(img_to_flash)}...", "#FBBF24")
+            ok_flash, msg_flash = self.ops.flash_boot_image_fastboot(
+                img_to_flash,
+                slot=slot,
+                auto_reboot_fastboot=True,
+                status_callback=lambda s: self._set_root_progress(s, "#FBBF24")
+            )
+            self._set_root_progress(msg_flash.splitlines()[0], "#10B981" if ok_flash else "#EF4444")
+            if ok_flash:
+                self.dispatch(lambda: messagebox.showinfo("Flash Success", f"{msg_flash}\n\nDevice is rebooting into rooted Android! Proceed to Step 5 to verify."))
+            else:
+                self.dispatch(lambda: messagebox.showerror("Flash Failed", msg_flash))
+            self.refresh_device_status_async()
         threading.Thread(target=_run, daemon=True).start()
 
     def _action_pull_patched_boot(self):
@@ -2160,9 +2231,9 @@ class MainWindow(ctk.CTk):
                             text_color="#10B981"
                         )
                 self.dispatch(_update_ui)
-                messagebox.showinfo("Patched Image Retrieved", f"{msg}\n\nReady for Step 5: Flash via Fastboot!")
+                self.dispatch(lambda: messagebox.showinfo("Patched Image Retrieved", msg))
             else:
-                messagebox.showwarning("Patched Image Not Found", msg)
+                self.dispatch(lambda: messagebox.showwarning("Patched Image Not Found", msg))
         threading.Thread(target=_run, daemon=True).start()
 
     def _action_use_predumped_patched_boot(self):
@@ -2175,10 +2246,10 @@ class MainWindow(ctk.CTk):
                     text=f"Patched Boot: {candidate} ({size_mb:.1f} MB) [Ready to Flash]",
                     text_color="#10B981"
                 )
-            messagebox.showinfo("Pre-Patched Image Loaded", f"Verified Magisk-patched boot image loaded:\n{candidate} ({size_mb:.1f} MB)\n\nReady to Flash in Step 5!")
+            messagebox.showinfo("Pre-Patched Image Loaded", f"Verified Magisk-patched boot image loaded:\n{candidate} ({size_mb:.1f} MB)")
             self.append_log(f"Loaded verified pre-patched boot: {candidate}")
         else:
-            messagebox.showwarning("Not Found", "No pre-patched boot image found in backups/. Please patch in Magisk (Step 4) or browse.")
+            messagebox.showwarning("Not Found", "No pre-patched boot image found in backups/. Please patch in Magisk or browse.")
 
     def _action_browse_patched_boot(self):
         img_path = filedialog.askopenfilename(title="Select Magisk-Patched Boot Image (.img)", filetypes=[("Patched Boot Image", "*.img")])
@@ -2193,56 +2264,16 @@ class MainWindow(ctk.CTk):
             self.append_log(f"Selected patched boot image: {self._selected_patched_boot} ({size_mb:.1f} MB)")
 
     def _action_flash_patched_boot_wizard(self):
-        img_to_flash = self._selected_patched_boot
-        if not img_to_flash or not os.path.exists(img_to_flash):
-            candidate = self._find_backup_file("magisk_patched_boot_a.img", "magisk_patched")
-            if candidate and os.path.exists(candidate):
-                img_to_flash = os.path.abspath(candidate)
-                self._selected_patched_boot = img_to_flash
-            else:
-                img_to_flash = filedialog.askopenfilename(title="Select Magisk-Patched Boot Image (.img)", filetypes=[("Disk Image", "*.img")])
-                if not img_to_flash:
-                    return
-                self._selected_patched_boot = os.path.abspath(img_to_flash)
-
-        info = self.adb.get_connected_device_info()
-        slot = info.get("boot_slot", "_a")
-
-        if info["mode"] == "adb":
-            if not messagebox.askyesno(
-                "Reboot to Fastboot Required",
-                f"Your device is currently in standard Android ADB mode.\n\n"
-                f"Flashing requires Fastboot mode. Would you like to reboot to Fastboot now?\n\n"
-                f"(After device reboots to Fastboot, click Flash again)."
-            ):
-                return
-            self.ops.reboot_device("bootloader")
-            messagebox.showinfo("Rebooting to Fastboot", "Reboot command sent. Please wait ~10 seconds for the Fastboot screen, then click 'Flash Patched Boot & Reboot'.")
-            self.refresh_device_status_async()
-            return
-
-        if not messagebox.askyesno(
-            "Confirm Fastboot Flash",
-            f"Are you sure you want to flash:\n{img_to_flash}\n\nto slot {slot} via Fastboot and reboot?"
-        ):
-            return
-
-        def _run():
-            ok, msg = self.ops.flash_boot_image_fastboot(img_to_flash, slot=slot)
-            if ok:
-                messagebox.showinfo("Flash Success", f"{msg}\n\nDevice is booting into rooted Android!\nProceed to Step 6 to verify root access.")
-            else:
-                messagebox.showerror("Flash Failed", msg)
-            self.refresh_device_status_async()
-        threading.Thread(target=_run, daemon=True).start()
+        self._action_auto_pull_and_flash_boot()
 
     def _action_verify_root(self):
         def _run():
             ok, msg = self.ops.verify_root_access()
+            self._set_root_progress(msg.splitlines()[0], "#10B981" if ok else "#F59E0B")
             if ok:
-                messagebox.showinfo("Root Verification", f"🎉 CONGRATULATIONS!\n\n{msg}\n\nYour Onyx Boox C69HD is successfully rooted with Magisk!")
+                self.dispatch(lambda: messagebox.showinfo("Root Verification", f"🎉 CONGRATULATIONS!\n\n{msg}\n\nYour Onyx Boox C69HD is successfully rooted with Magisk!"))
             else:
-                messagebox.showwarning("Root Verification", f"{msg}\n\nIf you just flashed, please ensure the device has fully booted and Magisk setup is completed.")
+                self.dispatch(lambda: messagebox.showwarning("Root Verification", f"{msg}\n\nIf you just flashed, please ensure the device has fully booted and Magisk setup is completed."))
             self.refresh_device_status_async()
         threading.Thread(target=_run, daemon=True).start()
 
@@ -2257,44 +2288,42 @@ class MainWindow(ctk.CTk):
         def _run():
             ok, msg = self.ops.install_magisk_apk(assets_apk)
             if ok:
-                messagebox.showinfo("Magisk Installed", msg)
+                self.dispatch(lambda: messagebox.showinfo("Magisk Installed", msg))
             else:
-                messagebox.showerror("Install Error", msg)
+                self.dispatch(lambda: messagebox.showerror("Install Error", msg))
         threading.Thread(target=_run, daemon=True).start()
 
     def _action_flash_patched_boot(self):
-        self._action_flash_patched_boot_wizard()
+        self._action_auto_pull_and_flash_boot()
 
     def _action_restore_stock_boot(self):
-        found_stock = self._find_backup_file("stock_boot_a.img", "stock_boot_b.img", "stock_boot.img")
-        img_path = found_stock or filedialog.askopenfilename(title="Select Stock Boot Image (.img)", filetypes=[("Disk Image", "*.img")])
+        found_stock = self._selected_stock_boot or self._find_backup_file("stock_boot_a.img", "stock_boot_b.img", "stock_boot.img")
+        img_path = found_stock if (found_stock and os.path.exists(found_stock)) else filedialog.askopenfilename(title="Select Stock Boot Image (.img)", filetypes=[("Disk Image", "*.img")])
         if not img_path:
             return
 
-        info = self.adb.get_connected_device_info()
-        slot = info.get("boot_slot", "_a")
-
-        if info["mode"] == "adb":
-            if not messagebox.askyesno(
-                "Reboot to Fastboot Required",
-                f"Your device is currently in standard Android ADB mode.\n\n"
-                f"Restoring stock boot requires Fastboot mode. Reboot to Fastboot now?"
-            ):
-                return
-            self.ops.reboot_device("bootloader")
-            messagebox.showinfo("Rebooting to Fastboot", "Reboot command sent. Please wait ~10 seconds for the Fastboot screen, then click 'Restore Stock Boot' again.")
-            self.refresh_device_status_async()
-            return
-
-        if not messagebox.askyesno("Confirm Stock Restore", f"Are you sure you want to restore stock boot from:\n{img_path}\nto slot {slot} via Fastboot?"):
+        if not messagebox.askyesno(
+            "Confirm Stock Restore",
+            f"Are you sure you want to restore stock boot from:\n{img_path}\n\n"
+            f"The tool will automatically reboot to Fastboot, flash the stock boot image, and reboot Android."
+        ):
             return
 
         def _run():
-            ok, msg = self.ops.flash_boot_image_fastboot(img_path, slot=slot)
+            self._set_root_progress("Preparing to restore stock boot via Fastboot...", "#FBBF24")
+            info = self.adb.get_connected_device_info()
+            slot = info.get("boot_slot", "_a")
+            ok, msg = self.ops.flash_boot_image_fastboot(
+                img_path,
+                slot=slot,
+                auto_reboot_fastboot=True,
+                status_callback=lambda s: self._set_root_progress(s, "#FBBF24")
+            )
+            self._set_root_progress(msg.splitlines()[0], "#10B981" if ok else "#EF4444")
             if ok:
-                messagebox.showinfo("Stock Restored", f"{msg}\n\nFactory stock boot restored. Device has rebooted to unrooted state.")
+                self.dispatch(lambda: messagebox.showinfo("Stock Restored", f"{msg}\n\nFactory stock boot restored."))
             else:
-                messagebox.showerror("Restore Failed", msg)
+                self.dispatch(lambda: messagebox.showerror("Restore Failed", msg))
             self.refresh_device_status_async()
         threading.Thread(target=_run, daemon=True).start()
 
@@ -2309,9 +2338,9 @@ class MainWindow(ctk.CTk):
         def _run():
             ok, msg = self.ops.install_magisk_wake_module(assets_zip)
             if ok:
-                messagebox.showinfo("Module Installed", msg)
+                self.dispatch(lambda: messagebox.showinfo("Module Installed", msg))
             else:
-                messagebox.showerror("Module Error", msg)
+                self.dispatch(lambda: messagebox.showerror("Module Error", msg))
         threading.Thread(target=_run, daemon=True).start()
 
     def _action_boot_recovery(self):
@@ -2326,26 +2355,19 @@ class MainWindow(ctk.CTk):
                     return
                 self._selected_recovery_img = os.path.abspath(rec_img)
 
-        info = self.adb.get_connected_device_info()
-        if info["mode"] == "adb":
-            if not messagebox.askyesno(
-                "Reboot to Fastboot Required",
-                f"Your device is currently in standard Android ADB mode.\n\n"
-                f"Tether-booting TWRP to RAM requires Fastboot mode. Would you like to reboot to Fastboot now?\n\n"
-                f"(After the device enters Fastboot, click 'Tether-Boot TWRP to RAM' again)."
-            ):
-                return
-            self.ops.reboot_device("bootloader")
-            messagebox.showinfo("Rebooting to Fastboot", "Reboot command sent. Please wait ~10 seconds for Fastboot, then click 'Tether-Boot TWRP to RAM' again.")
-            self.refresh_device_status_async()
-            return
-
         def _run():
-            ok, msg = self.ops.boot_recovery_fastboot(rec_img)
+            self._set_root_progress("Starting 1-Click TWRP Tether-Boot...", "#FBBF24")
+            ok, msg = self.ops.boot_recovery_fastboot(
+                rec_img,
+                auto_reboot_fastboot=True,
+                wait_for_recovery=True,
+                status_callback=lambda s: self._set_root_progress(s, "#FBBF24")
+            )
+            self._set_root_progress(msg.splitlines()[0], "#10B981" if ok else "#EF4444")
             if ok:
-                messagebox.showinfo("TWRP Tether-Booting", f"{msg}\n\nDevice is booting into TWRP recovery in RAM!\nTouch navigation and EPDC E-Ink display are active.")
+                self.dispatch(lambda: messagebox.showinfo("TWRP Tether-Boot Ready", msg))
             else:
-                messagebox.showerror("Boot Recovery Failed", msg)
+                self.dispatch(lambda: messagebox.showerror("Boot Recovery Failed", msg))
             self.refresh_device_status_async()
         threading.Thread(target=_run, daemon=True).start()
 
@@ -2361,46 +2383,46 @@ class MainWindow(ctk.CTk):
                     return
                 self._selected_recovery_img = os.path.abspath(rec_img)
 
-        info = self.adb.get_connected_device_info()
-        slot = info.get("boot_slot", "_a")
-
-        if info["mode"] == "adb":
-            if not messagebox.askyesno(
-                "Reboot to Fastboot Required",
-                f"Your device is currently in standard Android ADB mode.\n\n"
-                f"Flashing custom recovery requires Fastboot mode. Reboot to Fastboot now?"
-            ):
-                return
-            self.ops.reboot_device("bootloader")
-            messagebox.showinfo("Rebooting to Fastboot", "Reboot command sent. Please wait ~10 seconds for Fastboot, then click 'Flash TWRP to Recovery' again.")
-            self.refresh_device_status_async()
-            return
-
         if not messagebox.askyesno(
             "Confirm Flash Recovery",
             f"⚠️ WARNING: Flashing custom recovery will permanently write to your recovery partition:\n{rec_img}\n\n"
-            f"(Tip: Tether-booting to RAM is recommended to test first without flashing).\n\n"
-            f"Are you sure you want to permanently flash this recovery image and reboot into TWRP?"
+            f"The tool will automatically reboot to Fastboot, flash TWRP, and reboot into Recovery.\n"
+            f"(Tip: Tether-booting to RAM is recommended first if you only want to test).\n\n"
+            f"Proceed?"
         ):
             return
 
         def _run():
-            ok, msg = self.ops.flash_recovery_fastboot(rec_img, slot=slot, reboot_to_recovery=True)
+            self._set_root_progress("Preparing to flash TWRP permanently...", "#FBBF24")
+            info = self.adb.get_connected_device_info()
+            slot = info.get("boot_slot", "_a")
+            ok, msg = self.ops.flash_recovery_fastboot(
+                rec_img,
+                slot=slot,
+                reboot_to_recovery=True,
+                auto_reboot_fastboot=True,
+                wait_for_recovery=True,
+                status_callback=lambda s: self._set_root_progress(s, "#FBBF24")
+            )
+            self._set_root_progress(msg.splitlines()[0], "#10B981" if ok else "#EF4444")
             if ok:
-                messagebox.showinfo("Recovery Flashed", f"{msg}\n\nTWRP has been permanently installed on your device!")
+                self.dispatch(lambda: messagebox.showinfo("Recovery Flashed", f"{msg}\n\nTWRP has been permanently installed on your device!"))
             else:
-                messagebox.showerror("Flash Recovery Failed", msg)
+                self.dispatch(lambda: messagebox.showerror("Flash Recovery Failed", msg))
             self.refresh_device_status_async()
         threading.Thread(target=_run, daemon=True).start()
 
     def _action_reboot_recovery(self):
-        info = self.adb.get_connected_device_info()
         def _run():
-            if info["mode"] == "fastboot":
-                self.adb.run_fastboot("reboot", "recovery")
+            self._set_root_progress("Rebooting device into Recovery mode...", "#FBBF24")
+            mode, _, _ = self.adb.get_device_mode()
+            if mode == "fastboot":
+                ok, _, err = self.adb.run_fastboot("reboot", "recovery")
+                msg = "Reboot to recovery command sent." if ok else f"Failed: {err}"
             else:
-                self.ops.reboot_device("recovery")
-            messagebox.showinfo("Rebooting", "Reboot to recovery command sent. Please wait for recovery to initialize on screen.")
+                ok, msg = self.ops.reboot_device("recovery")
+            self._set_root_progress(msg, "#10B981" if ok else "#EF4444")
+            self.dispatch(lambda: messagebox.showinfo("Rebooting", "Reboot to recovery command sent. Please wait for recovery to initialize on screen."))
             self.refresh_device_status_async()
         threading.Thread(target=_run, daemon=True).start()
 

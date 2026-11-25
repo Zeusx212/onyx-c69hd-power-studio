@@ -268,6 +268,52 @@ class DeviceOps:
     # ==========================================
     # ROOT & PARTITIONS
     # ==========================================
+    def ensure_fastboot_mode(self, auto_reboot=True, status_callback=None):
+        """
+        Ensures the device is in Fastboot bootloader mode.
+        If in ADB or Recovery mode and auto_reboot=True, reboots to bootloader and waits.
+        """
+        mode, _, is_wireless = self.adb.get_device_mode()
+        if mode == "fastboot":
+            return True, "Device is in Fastboot mode."
+        if is_wireless:
+            return False, (
+                "Device is connected via Wireless ADB.\n"
+                "Fastboot operations require a direct USB data cable connection."
+            )
+        if mode in ("adb", "recovery"):
+            if not auto_reboot:
+                return False, f"Device is currently in {mode.upper()} mode. Fastboot mode is required."
+            if status_callback:
+                status_callback("Rebooting device to Fastboot bootloader...")
+            self.adb.log("Rebooting device to Fastboot bootloader...")
+            ok, _, err = self.adb.run_adb("reboot", "bootloader")
+            if not ok:
+                return False, f"Failed to send reboot bootloader command: {err}"
+            ok_wait, _, msg_wait = self.adb.wait_for_mode("fastboot", timeout=35, status_callback=status_callback)
+            if ok_wait:
+                return True, "Device entered Fastboot mode."
+            return False, msg_wait
+        return False, (
+            f"No usable device detected (current state: {mode}).\n"
+            "Please connect via USB cable with USB Debugging enabled, or boot into Fastboot manually."
+        )
+
+    def _is_fastboot_unlocked(self):
+        """
+        Returns (known, unlocked_bool).
+        Uses fastboot getvar unlocked; returns (False, True) if bootloader doesn't report the var.
+        """
+        val = self.adb.get_fastboot_var("unlocked")
+        if val is None:
+            return False, True
+        v = val.strip().lower()
+        if v == "yes":
+            return True, True
+        if v == "no":
+            return True, False
+        return False, True
+
     def backup_stock_partitions(self, slot="_a", dest_dir=None, partition_list=None):
         if not dest_dir:
             dest_dir = os.path.join(os.getcwd(), "backups")
@@ -277,24 +323,56 @@ class DeviceOps:
             partition_list = [f"boot{slot}", f"vbmeta{slot}"]
 
         self.adb.log(f"Starting partition dump for: {', '.join(partition_list)}...")
-        
-        ok, su_check, _ = self.adb.run_shell("su -c 'id'")
-        if not ok or "uid=0" not in su_check:
-            return False, "Root (su) is required on device to dump active partitions directly."
+
+        mode, _, _ = self.adb.get_device_mode()
+        in_recovery = (mode == "recovery")
+
+        if in_recovery:
+            ok, id_out, _ = self.adb.run_shell("id")
+            if not ok or "uid=0" not in id_out:
+                return False, "TWRP recovery shell does not have root (uid=0) privileges."
+            tmp_prefix = "/tmp"
+        else:
+            ok, su_check, _ = self.adb.run_shell("su -c 'id'")
+            if not ok or "uid=0" not in su_check:
+                return False, (
+                    "Root (su) or TWRP Recovery mode is required to dump stock partitions.\n"
+                    "Tip: Tether-boot TWRP in Step 2 first — TWRP can dump stock partitions without needing root!"
+                )
+            tmp_prefix = "/sdcard"
 
         saved_files = []
+        errors = []
         for part in partition_list:
             local_file = os.path.join(dest_dir, f"stock_{part}.img")
-            self.adb.run_shell(f"su -c 'dd if=/dev/block/bootdevice/by-name/{part} of=/sdcard/dump_{part}.img'")
-            ok_pull, _, err = self.adb.run_adb("pull", f"/sdcard/dump_{part}.img", local_file)
-            self.adb.run_shell(f"rm -f /sdcard/dump_{part}.img")
-            if ok_pull and os.path.exists(local_file):
+            remote_tmp = f"{tmp_prefix}/dump_{part}.img"
+            dd_cmd = (
+                f"if [ -e /dev/block/bootdevice/by-name/{part} ]; then "
+                f"dd if=/dev/block/bootdevice/by-name/{part} of={remote_tmp}; "
+                f"elif [ -e /dev/block/by-name/{part} ]; then "
+                f"dd if=/dev/block/by-name/{part} of={remote_tmp}; "
+                f"else exit 2; fi"
+            )
+            full_cmd = dd_cmd if in_recovery else f"su -c '{dd_cmd}'"
+            ok_dd, _, err_dd = self.adb.run_shell(full_cmd, timeout=90)
+            if not ok_dd:
+                errors.append(f"{part}: block device not found or dd failed ({err_dd})")
+                continue
+
+            ok_pull, _, err_pull = self.adb.run_adb("pull", remote_tmp, local_file, timeout=90)
+            self.adb.run_shell(f"rm -f {remote_tmp}")
+            if ok_pull and os.path.exists(local_file) and os.path.getsize(local_file) > 0:
                 saved_files.append(local_file)
                 self.adb.log(f"Saved {part} -> {local_file} ({os.path.getsize(local_file)} bytes)")
+            else:
+                errors.append(f"{part}: pull failed ({err_pull})")
 
         if saved_files:
-            return True, f"Successfully dumped {len(saved_files)} partitions to:\n" + "\n".join(saved_files)
-        return False, "Failed to dump partitions."
+            msg = f"Successfully dumped {len(saved_files)} partition(s) to:\n" + "\n".join(saved_files)
+            if errors:
+                msg += "\n\nSkipped/Unavailable:\n" + "\n".join(errors)
+            return True, msg
+        return False, "Failed to dump partitions.\n" + ("\n".join(errors) if errors else "")
 
     def install_magisk_apk(self, apk_path):
         if not os.path.exists(apk_path):
@@ -305,27 +383,84 @@ class DeviceOps:
             return True, "Magisk APK installed successfully on device!"
         return False, f"Failed to install APK: {err or out}"
 
-    def flash_boot_image_fastboot(self, image_path, slot="_a"):
+    def install_magisk_via_twrp(self, apk_path, reboot_to_system=True):
+        """
+        Flashes Magisk directly from TWRP recovery by pushing magisk.apk as /tmp/Magisk.zip
+        and invoking `twrp install /tmp/Magisk.zip`.
+        """
+        if not os.path.exists(apk_path):
+            return False, f"Magisk APK/ZIP not found: {apk_path}"
+
+        mode, _, _ = self.adb.get_device_mode()
+        if mode != "recovery":
+            return False, f"Device must be in TWRP Recovery mode (current mode: {mode})."
+
+        remote_zip = "/tmp/Magisk.zip"
+        self.adb.log(f"Pushing {apk_path} -> {remote_zip} in TWRP...")
+        ok_push, _, err_push = self.adb.run_adb("push", apk_path, remote_zip, timeout=60)
+        if not ok_push:
+            return False, f"Failed to push Magisk package to TWRP: {err_push}"
+
+        self.adb.log("Running TWRP installer: twrp install /tmp/Magisk.zip ...")
+        ok_inst, out_inst, err_inst = self.adb.run_shell(f"twrp install {remote_zip}", timeout=120)
+        self.adb.run_shell(f"rm -f {remote_zip}")
+
+        combined = f"{out_inst}\n{err_inst}".lower()
+        if ok_inst and "error" not in combined and "failed" not in combined:
+            if reboot_to_system:
+                self.adb.log("Magisk flashed in TWRP! Rebooting to Android system...")
+                self.adb.run_adb("reboot")
+                return True, "Magisk flashed successfully in TWRP! Device is rebooting into rooted Android."
+            return True, "Magisk flashed successfully in TWRP!"
+        return False, (
+            f"TWRP install returned an error:\n{out_inst or err_inst}\n\n"
+            "You can also use the Boot Image Patching method (Method B) in Step 4."
+        )
+
+    def flash_boot_image_fastboot(self, image_path, slot="_a", auto_reboot_fastboot=False, status_callback=None):
         if not os.path.exists(image_path):
             return False, f"Image file not found: {image_path}"
-        
-        self.adb.log(f"Flashing {image_path} to boot{slot}...")
-        ok, out, err = self.adb.run_fastboot("flash", f"boot{slot}", image_path)
-        if not ok:
-            ok, out, err = self.adb.run_fastboot("flash", "boot", image_path)
-        
+
+        if auto_reboot_fastboot:
+            ok_fb, msg_fb = self.ensure_fastboot_mode(auto_reboot=True, status_callback=status_callback)
+            if not ok_fb:
+                return False, msg_fb
+
+        known, is_unlocked = self._is_fastboot_unlocked()
+        if known and not is_unlocked:
+            return False, "Bootloader is LOCKED! Please unlock the bootloader in Step 1 before flashing boot."
+
+        target = f"boot{slot}" if slot else "boot"
+        if status_callback:
+            status_callback(f"Flashing {os.path.basename(image_path)} to {target}...")
+        self.adb.log(f"Flashing {image_path} to {target}...")
+        ok, out, err = self.adb.run_fastboot("flash", target, image_path, timeout=60)
+        if not ok and slot:
+            ok, out, err = self.adb.run_fastboot("flash", "boot", image_path, timeout=60)
+
         if ok:
             self.adb.log("Flash completed successfully. Rebooting device...")
             self.adb.run_fastboot("reboot")
             return True, "Boot image flashed successfully! Device is rebooting."
         return False, f"Fastboot flash failed: {err or out}"
 
-    def unlock_bootloader_fastboot(self):
+    def unlock_bootloader_fastboot(self, auto_reboot_fastboot=False, status_callback=None):
         """Attempts to unlock the bootloader in Fastboot mode."""
+        if auto_reboot_fastboot:
+            ok_fb, msg_fb = self.ensure_fastboot_mode(auto_reboot=True, status_callback=status_callback)
+            if not ok_fb:
+                return False, msg_fb
+
+        known, is_unlocked = self._is_fastboot_unlocked()
+        if known and is_unlocked:
+            return True, "Bootloader is already unlocked!"
+
+        if status_callback:
+            status_callback("Sending unlock command (check device screen to confirm)...")
         self.adb.log("Attempting Fastboot bootloader unlock...")
-        ok, out, err = self.adb.run_fastboot("flashing", "unlock")
+        ok, out, err = self.adb.run_fastboot("flashing", "unlock", timeout=60)
         if not ok:
-            ok, out, err = self.adb.run_fastboot("oem", "unlock")
+            ok, out, err = self.adb.run_fastboot("oem", "unlock", timeout=60)
         if ok:
             return True, "Bootloader unlock command sent successfully. If prompted on device screen, confirm using side keys."
         return False, f"Bootloader unlock failed: {err or out}"
@@ -336,7 +471,7 @@ class DeviceOps:
             return False, f"Local boot image not found: {boot_img_path}"
         self.adb.log(f"Pushing {boot_img_path} -> {dest_remote}...")
         self.adb.run_shell("mkdir -p /sdcard/Download")
-        ok, out, err = self.adb.run_adb("push", boot_img_path, dest_remote)
+        ok, out, err = self.adb.run_adb("push", boot_img_path, dest_remote, timeout=60)
         if ok:
             return True, f"Stock boot image pushed to {dest_remote} on device."
         return False, f"Failed to push boot image: {err or out}"
@@ -351,18 +486,23 @@ class DeviceOps:
         os.makedirs(dest_dir, exist_ok=True)
 
         self.adb.log("Scanning device for Magisk-patched boot images...")
+        # Avoid mksh returning exit code 1 when one glob path has no matches
         ok, out, err = self.adb.run_shell(
-            "ls -t /sdcard/Download/magisk_patched*.img /sdcard/magisk_patched*.img 2>/dev/null"
+            "ls -t /sdcard/Download/magisk_patched*.img 2>/dev/null; ls -t /sdcard/magisk_patched*.img 2>/dev/null; true"
         )
-        if not ok or not out.strip():
+        candidates = [
+            line.strip() for line in (out or "").splitlines()
+            if line.strip().startswith("/") and line.strip().endswith(".img")
+        ]
+        if not ok or not candidates:
             return False, None, "No Magisk-patched boot images found in /sdcard/Download/ yet. Please patch stock_boot.img in the Magisk app first."
 
-        candidate = out.strip().splitlines()[0].strip()
+        candidate = candidates[0]
         filename = os.path.basename(candidate)
         local_dest = os.path.join(dest_dir, filename)
 
         self.adb.log(f"Found patched image: {candidate} -> Pulling to {local_dest}...")
-        ok_pull, _, err_pull = self.adb.run_adb("pull", candidate, local_dest)
+        ok_pull, _, err_pull = self.adb.run_adb("pull", candidate, local_dest, timeout=60)
         if ok_pull and os.path.exists(local_dest):
             size_mb = os.path.getsize(local_dest) / (1024 * 1024)
             return True, local_dest, f"Successfully pulled {filename} ({size_mb:.1f} MB) to:\n{local_dest}"
@@ -400,7 +540,7 @@ class DeviceOps:
             return True, "c69hd-wake module installed! Reboot to activate hardware button wake."
         return False, f"Magisk module install output:\n{out or err}"
 
-    def boot_recovery_fastboot(self, image_path):
+    def boot_recovery_fastboot(self, image_path, auto_reboot_fastboot=False, wait_for_recovery=False, status_callback=None):
         """
         Tether-boots a custom recovery image (e.g. TWRP) directly into RAM via Fastboot ('fastboot boot <image>').
         Zero-risk: leaves physical recovery and boot partitions untouched.
@@ -408,30 +548,65 @@ class DeviceOps:
         if not os.path.exists(image_path):
             return False, f"Recovery image file not found: {image_path}"
 
-        self.adb.log(f"Tether-booting {image_path} to RAM via Fastboot...")
-        ok, out, err = self.adb.run_fastboot("boot", image_path)
-        if ok:
-            return True, "Recovery image sent to device RAM successfully! Device is tether-booting into custom recovery (TWRP)..."
-        return False, f"Fastboot boot failed: {err or out}"
+        if auto_reboot_fastboot:
+            ok_fb, msg_fb = self.ensure_fastboot_mode(auto_reboot=True, status_callback=status_callback)
+            if not ok_fb:
+                return False, msg_fb
 
-    def flash_recovery_fastboot(self, image_path, slot=None, reboot_to_recovery=True):
+        known, is_unlocked = self._is_fastboot_unlocked()
+        if known and not is_unlocked:
+            return False, "Bootloader is LOCKED! Please unlock the bootloader in Step 1 before tether-booting TWRP."
+
+        if status_callback:
+            status_callback("Streaming TWRP image to device RAM (fastboot boot)...")
+        self.adb.log(f"Tether-booting {image_path} to RAM via Fastboot...")
+        ok, out, err = self.adb.run_fastboot("boot", image_path, timeout=60)
+        if not ok:
+            return False, f"Fastboot boot failed: {err or out}"
+
+        if wait_for_recovery:
+            if status_callback:
+                status_callback("Waiting for TWRP recovery ADB to come online...")
+            ok_rec, _, msg_rec = self.adb.wait_for_mode("recovery", timeout=40, status_callback=status_callback)
+            if ok_rec:
+                return True, "TWRP booted into RAM and Recovery ADB is connected! Ready to backup or flash Magisk."
+            return True, f"Recovery image sent to device RAM, but Recovery ADB did not respond in time ({msg_rec}). Check your device screen."
+
+        return True, "Recovery image sent to device RAM successfully! Device is tether-booting into custom recovery (TWRP)..."
+
+    def flash_recovery_fastboot(self, image_path, slot=None, reboot_to_recovery=True, auto_reboot_fastboot=False, wait_for_recovery=False, status_callback=None):
         """
         Flashes a custom recovery image permanently to the device recovery partition via Fastboot.
         """
         if not os.path.exists(image_path):
             return False, f"Recovery image file not found: {image_path}"
 
-        self.adb.log(f"Flashing recovery partition with {image_path} via Fastboot...")
+        if auto_reboot_fastboot:
+            ok_fb, msg_fb = self.ensure_fastboot_mode(auto_reboot=True, status_callback=status_callback)
+            if not ok_fb:
+                return False, msg_fb
+
+        known, is_unlocked = self._is_fastboot_unlocked()
+        if known and not is_unlocked:
+            return False, "Bootloader is LOCKED! Please unlock the bootloader in Step 1 before flashing TWRP."
+
         target_part = f"recovery{slot}" if slot else "recovery"
-        ok, out, err = self.adb.run_fastboot("flash", target_part, image_path)
+        if status_callback:
+            status_callback(f"Flashing TWRP to {target_part}...")
+        self.adb.log(f"Flashing recovery partition with {image_path} via Fastboot...")
+        ok, out, err = self.adb.run_fastboot("flash", target_part, image_path, timeout=60)
         if not ok and slot:
             # Fallback to unslotted recovery partition
-            ok, out, err = self.adb.run_fastboot("flash", "recovery", image_path)
+            ok, out, err = self.adb.run_fastboot("flash", "recovery", image_path, timeout=60)
 
         if ok:
             if reboot_to_recovery:
                 self.adb.log("Rebooting device into recovery mode...")
                 self.adb.run_fastboot("reboot", "recovery")
+                if wait_for_recovery:
+                    if status_callback:
+                        status_callback("Waiting for TWRP recovery ADB to come online...")
+                    self.adb.wait_for_mode("recovery", timeout=40, status_callback=status_callback)
                 return True, "Custom recovery flashed successfully! Device is rebooting into recovery..."
             return True, "Custom recovery flashed successfully to recovery partition."
         return False, f"Fastboot flash recovery failed: {err or out}"
